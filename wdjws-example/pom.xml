@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>wdutil</groupId>
+		<artifactId>wdutil-parent</artifactId>
+		<version>1.0-SNAPSHOT</version>
+	</parent>
+	<artifactId>wdjws-example</artifactId>
+
+	<!-- A POM packaging type is preferable but the usage example is combined into this project to reduce the number of projects so the default jar packaging is used to compile and run the tests. -->
+	<!-- <packaging>pom</packaging> -->
+	<name>Workday JAX-WS Public Web Service Bindings</name>
+
+
+	<!-- The WDJWS Maven plugin will copy the Distribution Management and Extensions elements from the including Maven POM. -->
+
+	<!-- If using S3 for the repository the AWS credentials will be read from the standard AWS CLI cache. If the default region is not set to us-east-1
+		then add an override to the Maven settings.xml file:
+		<server>
+		<id>release-repository</id>
+		<configuration>
+		<region>us-east-1</region>
+		</configuration>
+		</server>
+		<server>
+		<id>snapshot-repository</id>
+		<configuration>
+		<region>us-east-1</region>
+		</configuration>
+		</server> -->
+
+
+	<distributionManagement>
+		<repository>
+			<id>release-repository</id>
+			<name>Repository Name</name>
+			<url>s3://some-bucket-maven-repository/releases</url>
+		</repository>
+		<snapshotRepository>
+			<id>snapshot-repository</id>
+			<name>Repository Name</name>
+			<url>s3://some-bucket-maven-repository/snapshots</url>
+		</snapshotRepository>
+	</distributionManagement>
+
+	<dependencies>
+
+		<!-- This dependency is actually installed as part of this project and normally dependent code would be located in a different project.
+			However in order to reduce the complexity of the example usage the test cases were incorporated into this single project. -->
+		
+		<!-- temporarily comment this dependency out when running the build for the first time and afterwards add it back in -->	
+		<dependency>
+			<groupId>com.workday</groupId>
+			<artifactId>intsys</artifactId>
+			<version>33.0</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>wdutil</groupId>
+			<artifactId>wdjws-util</artifactId>
+			<version>${project.version}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<version>5.5.1</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-slf4j-impl</artifactId>
+			<version>2.12.1</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-core</artifactId>
+			<version>2.12.1</version>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- JAX-WS dependencies for testing. -->
+		<dependency>
+			<groupId>javax.xml.ws</groupId>
+			<artifactId>jaxws-api</artifactId>
+			<version>2.3.1</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>javax.jws</groupId>
+			<artifactId>javax.jws-api</artifactId>
+			<version>1.1</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>javax.annotation</groupId>
+			<artifactId>javax.annotation-api</artifactId>
+			<version>1.3.2</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>com.sun.xml.ws</groupId>
+			<artifactId>rt</artifactId>
+			<version>2.3.2</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>com.sun.xml.messaging.saaj</groupId>
+			<artifactId>saaj-impl</artifactId>
+			<version>1.5.1</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.glassfish.jersey.core</groupId>
+			<artifactId>jersey-client</artifactId>
+			<version>2.29.1</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.glassfish.jersey.inject</groupId>
+			<artifactId>jersey-hk2</artifactId>
+			<version>2.29.1</version>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- JAX-RS dependencies for testing -->
+
+		<!-- Alternatively the CXF JAX-WS implementation could be used. It still uses the JakartaEE JAXB and SAAJ implementations -->
+
+		<!--
+
+			<dependency>
+			<groupId>org.apache.cxf</groupId>
+			<artifactId>cxf-rt-frontend-jaxws</artifactId>
+			</dependency>
+
+			<dependency>
+			<groupId>org.apache.cxf</groupId>
+			<artifactId>cxf-rt-transports-http</artifactId>
+			</dependency>
+
+
+		-->
+	</dependencies>
+
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>properties-maven-plugin</artifactId>
+				<version>1.0.0</version>
+				<executions>
+					<execution>
+						<phase>initialize</phase>
+						<goals>
+							<goal>read-project-properties</goal>
+						</goals>
+						<configuration>
+							<files>
+								<file>test.properties</file>
+							</files>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>wdutil</groupId>
+				<artifactId>wdjws-maven-plugin</artifactId>
+				<version>2019.10.0-SNAPSHOT</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>wsimport</goal>
+						</goals>
+						<configuration>
+							<wdTenantServiceURL>https://${workday.host}/ccx/service/${workday.tenant}</wdTenantServiceURL>
+							<wdVersion>${workday.version}</wdVersion>
+							<groupId>com.workday</groupId>
+							<!-- <artifactId>wd-websvc</artifactId> -->
+							<services>
+								<service>Integrations</service>
+							</services>
+							<aliases>
+								<Integrations>intsys</Integrations>
+							</aliases>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+
+		</plugins>
+
+		<!-- extensions>
+			<extension>
+			<groupId>com.gkatzioura.maven.cloud</groupId>
+			<artifactId>s3-storage-wagon</artifactId>
+			<version>2.3</version>
+			</extension>
+			</extensions> -->
+	</build>
+
+</project>
+
