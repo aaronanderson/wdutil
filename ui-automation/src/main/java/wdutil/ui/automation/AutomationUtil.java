@@ -7,14 +7,12 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-
-import javax.swing.Action;
 
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
@@ -465,18 +463,77 @@ public class AutomationUtil {
 		return new FirefoxDriver(options);
 	}
 
-	public static WebDriver chromeDriver(Path driverPath, Path fileDownloadPath) {
-		System.setProperty("webdriver.chrome.driver", driverPath.toAbsolutePath().toString());
+	public static class ChromeDriverBuilder {
 
-		HashMap<String, Object> chromePrefs = new HashMap<String, Object>();
-		chromePrefs.put("download.default_directory", fileDownloadPath.toAbsolutePath().toString());
-		chromePrefs.put("download.prompt_for_download", false);
-		chromePrefs.put("download.directory_upgrade", true);
-		chromePrefs.put("plugins.always_open_pdf_externally", true);
-		ChromeOptions options = new ChromeOptions();
-		options.setExperimentalOption("prefs", chromePrefs);
-		options.addArguments("--test-type");
-		return new ChromeDriver(options);
+		private ChromeOptions options = new ChromeOptions();
+		private HashMap<String, Object> chromePrefs = new HashMap<String, Object>();
+		private List<String> arguments = new LinkedList<>();
+		private final Path driverPath;
+
+		private ChromeDriverBuilder(Path driverPath) {
+			this.driverPath = driverPath;
+		}
+
+		public static ChromeDriverBuilder newInstance(Path driverPath) {
+			return new ChromeDriverBuilder(driverPath);
+		}
+
+		public ChromeDriverBuilder downloadPath(Path fileDownloadPath) {
+			chromePrefs.put("download.default_directory", fileDownloadPath.toAbsolutePath().toString());
+			chromePrefs.put("download.prompt_for_download", false);
+			chromePrefs.put("download.directory_upgrade", true);
+			chromePrefs.put("plugins.always_open_pdf_externally", true);
+			return this;
+		}
+
+		public ChromeDriverBuilder profile(Path userDataDirectory, String profileName) {
+
+			arguments.add("--user-data-dir=" + userDataDirectory.toAbsolutePath().toString());
+			if (profileName == null) {
+				profileName = "Default";
+			}
+			arguments.add("--profile-directory=" + profileName);
+			return this;
+		}
+
+		public ChromeDriverBuilder headless(boolean headless, String windowSize) {
+			if (headless) {
+				arguments.add("--headless");
+				if (windowSize == null) {
+					windowSize = "1280x1024";
+				}
+				arguments.add("--window-size=" + windowSize);
+			}
+			return this;
+		}
+
+		public ChromeDriverBuilder automationOptimized(boolean automationOptimized) {
+			if (automationOptimized) {
+				//https://medium.com/@petertc/pro-tips-for-selenium-setup-1855a11f88f8
+				chromePrefs.put("profile.managed_default_content_settings.images", 2);
+				chromePrefs.put("profile.default_content_setting_values.notifications", 2);
+				chromePrefs.put("profile.managed_default_content_settings.stylesheets", 2);
+				//chromePrefs.put("profile.managed_default_content_settings.cookies", 2);
+				chromePrefs.put("profile.managed_default_content_settings.javascript", 1);
+				chromePrefs.put("profile.managed_default_content_settings.plugins", 1);
+				chromePrefs.put("profile.managed_default_content_settings.popups", 2);
+				chromePrefs.put("profile.managed_default_content_settings.geolocation", 2);
+				chromePrefs.put("profile.managed_default_content_settings.media_stream", 2);
+				chromePrefs.put("disk-cache-size", 4096);
+			}
+			return this;
+		}
+
+		public ChromeDriver build() {
+			System.setProperty("webdriver.chrome.driver", driverPath.toAbsolutePath().toString());
+			ChromeOptions options = new ChromeOptions();
+			options.setExperimentalOption("prefs", chromePrefs);
+			arguments.add("--test-name=workday-ui-automation");
+			//https://chromium.googlesource.com/chromium/src/+/master/chrome/common/chrome_switches.cc
+			options.addArguments(arguments);
+			return new ChromeDriver(options);
+		}
+
 	}
 
 }

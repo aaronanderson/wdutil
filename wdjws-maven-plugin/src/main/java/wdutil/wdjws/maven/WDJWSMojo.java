@@ -17,6 +17,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.xml.XMLConstants;
@@ -101,6 +102,9 @@ public class WDJWSMojo extends AbstractMojo {
 	@Parameter
 	private String version;
 
+	@Parameter(defaultValue = "8")
+	private String jdkVersion;
+
 	////required for the buiild
 
 	@Parameter(defaultValue = "${project.build.directory}/generated-wdjws")
@@ -161,14 +165,14 @@ public class WDJWSMojo extends AbstractMojo {
 		try {
 
 			List<WSDL> wsdls = null;
-			if (services.length > 0) {
+			if (services != null && services.length > 0) {
 				wsdls = loadWSDLFromOptions();
 			} else {
 				wsdls = loadWSDLFromReport();
 			}
 
 			Map<String, String> serviceAliases = DEFAULT_ALIASES;
-			if (!aliases.isEmpty()) {
+			if (aliases != null && !aliases.isEmpty()) {
 				serviceAliases = aliases;
 			}
 
@@ -373,8 +377,10 @@ public class WDJWSMojo extends AbstractMojo {
 		mvn.setBuild(new Build());
 		mvn.getBuild().setExtensions(project.getBuild() != null ? project.getBuildExtensions() : Collections.EMPTY_LIST);
 		mvn.setDistributionManagement(project.getDistributionManagement());
+		mvn.setProperties(new Properties());
+		mvn.getProperties().setProperty("project.build.sourceEncoding", "UTF-8");
 
-		addCompile(mvn);
+		addCompile(mvn, jdkVersion);
 		addSources(mvn);
 
 		getLog().info(String.format("Writing Maven WSDL %s:%s:%s pom to file %s\n", mvn.getGroupId(), mvn.getArtifactId(), mvn.getVersion(), pomFile));
@@ -382,7 +388,7 @@ public class WDJWSMojo extends AbstractMojo {
 
 	}
 
-	public static void addCompile(Model mvn) throws IOException, XmlPullParserException {
+	public static void addCompile(Model mvn, String jdkVersion) throws IOException, XmlPullParserException {
 		Plugin plugin = new Plugin();
 		mvn.getBuild().getPlugins().add(plugin);
 		plugin.setGroupId("org.apache.maven.plugins");
@@ -396,7 +402,7 @@ public class WDJWSMojo extends AbstractMojo {
 		execution.addGoal("compile");
 
 		//<skipMain>true</skipMain>
-		StringBuilder pluginConfig = new StringBuilder("<configuration><release>8</release></configuration>");
+		StringBuilder pluginConfig = new StringBuilder("<configuration><release>").append(jdkVersion).append("</release></configuration>");
 		Xpp3Dom configuration = Xpp3DomBuilder.build(new ByteArrayInputStream(pluginConfig.toString().getBytes()), "UTF-8");
 		execution.setConfiguration(configuration);
 	}
