@@ -27,4 +27,4 @@ The ui-automation library contains common Selenium WebDriver based UI routines f
 
 ## Examples
 
-Example usages are provided for both the wdjws and ui-automation libraries.  
+Example usages are provided for both the wdjws and ui-automation libraries in a [separate repository](https://github.com/aaronanderson/wdutil-examples)  
