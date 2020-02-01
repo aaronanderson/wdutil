@@ -43,7 +43,7 @@ Dependency:
 
  
 ## ui-automation
-While Workday has an exhaustive API there are some operations that can only be performed through the user interface. Selenium WebDriver it used for programmatically controlling a web browser commonly for the purpose of automated application testing. The Workday UI is subject to weekly changes and attempting to build elaborate manual test cases would be cost prohibitive. However in certain circumstances using UI automation to perform UI tasks could save time and effort.  
+While Workday has an exhaustive API there are some operations that can only be performed through the user interface. Selenium WebDriver is used for programmatically controlling a web browser usually for the purpose of automated application testing. The Workday UI is subject to weekly changes and attempting to build elaborate manual test cases would be cost prohibitive. However in certain circumstances using UI automation to perform specific UI tasks could save time and effort.  
 
 The ui-automation library contains common Selenium WebDriver based UI routines for common Workday tasks such as logging in, conducting a search, performing a related action, etc.
 
