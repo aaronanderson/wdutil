@@ -412,7 +412,7 @@ public class WDJWSMojo extends AbstractMojo {
 		mvn.getBuild().getPlugins().add(plugin);
 		plugin.setGroupId("org.apache.maven.plugins");
 		plugin.setArtifactId("maven-source-plugin");
-		plugin.setVersion("3.0.1");
+		plugin.setVersion("3.2.1");
 		PluginExecution execution = new PluginExecution();
 		plugin.addExecution(execution);
 		execution.setId("attach-sources");
