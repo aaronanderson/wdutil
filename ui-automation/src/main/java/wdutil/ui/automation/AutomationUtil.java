@@ -253,7 +253,14 @@ public class AutomationUtil {
     public void waitForLoad() {
         //wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("//div[@data-automation-id='wd-LoadingPanel']")));
         //wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("//div[@data-automation-mode='react' and @aria-busy='true']")));
-        wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("//div[@data-automation-id='loadingGlass' and @data-automation-loadingpanelhidden='true']")));
+        //wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("//div[@data-automation-id='loadingGlass' and @data-automation-loadingpanelhidden='true']"))); 
+        try {
+            Thread.sleep(2000);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        //wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//span[starts-with(@title, 'Loading')]")));
+        wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("//span[starts-with(@title, 'Loading')]")));
     }
 
     public AutomationUtil enterText(String label, String value) {
@@ -326,7 +333,7 @@ public class AutomationUtil {
 
             }
             // wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//span[@data-automation-id='clearSearchButton']/div"))).click();
-            labelElement.click();
+            //labelElement.click();
         } else
             throw new IllegalArgumentException("search options are required");
 
@@ -622,7 +629,7 @@ public class AutomationUtil {
                         key.reset();
                     }
                 }
-                throw new IOException(String.format("Download file unavailable after %d seconds", timeout.toSeconds()));
+                throw new IOException(String.format("Download file unavailable after %d seconds", timeout.toMillis() * 1000));
             } catch (InterruptedException e) {
 
             }

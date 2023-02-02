@@ -11,7 +11,7 @@ import javax.ws.rs.client.ClientBuilder;
 import javax.ws.rs.client.Entity;
 import javax.ws.rs.core.Response;
 
-public class MyReports {
+public class Blobitory {
 
 	private static Client client;
 
@@ -22,13 +22,13 @@ public class MyReports {
 		return client;
 	}
 
-	public static void listMyReports(String serviceHost, String uid, String clientId, String password) throws Exception {
+	public static void listBlobitory(String serviceHost, String uid, String clientId, String password) throws Exception {
 
 		Client client = getClient();
 		Authenticator auth = new Authenticator(String.format("%s@%s", uid, clientId), password);
 		client.register(auth);
 
-		Response response = client.target(getMyReportsURL(serviceHost, clientId)).request().header("X-Tenant", clientId).get();
+		Response response = client.target(getBlobitoryURL(serviceHost, clientId)).request().header("X-Tenant", clientId).get();
 
 	}
 
@@ -74,12 +74,12 @@ public class MyReports {
 		}
 	}
 
-	public static String getMyReportsURL(String serviceHost, String clientId) {
+	public static String getBlobitoryURL(String serviceHost, String clientId) {
 		return String.format("https://%s/ccx/cc-blobitory/%s", serviceHost, clientId);
 	}
 
 	public static String getMyReportsFileURL(String serviceHost, String clientId, String docID) {
-		return String.format("%s/%s", getMyReportsURL(serviceHost, clientId), docID);
+		return String.format("%s/%s", getBlobitoryURL(serviceHost, clientId), docID);
 	}
 
 }
