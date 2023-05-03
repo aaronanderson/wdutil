@@ -39,6 +39,7 @@ import javax.xml.xpath.XPathFactory;
 import org.apache.maven.execution.MavenExecutionRequest;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Build;
+import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Plugin;
 import org.apache.maven.model.PluginExecution;
@@ -73,7 +74,7 @@ import com.sun.tools.ws.WsImport;
 @Mojo(name = "wsimport", defaultPhase = LifecyclePhase.GENERATE_SOURCES, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class WDJWSMojo extends AbstractMojo {
 
-	//Public Web Services -> Web Service ->  view URLs -> REST Workday XML
+	// Public Web Services -> Web Service -> view URLs -> REST Workday XML
 
 	@Parameter(required = true)
 	private URL wdTenantServiceURL;
@@ -102,10 +103,10 @@ public class WDJWSMojo extends AbstractMojo {
 	@Parameter
 	private String version;
 
-	@Parameter(defaultValue = "8")
+	@Parameter(defaultValue = "11")
 	private String jdkVersion;
 
-	////required for the buiild
+	//// required for the buiild
 
 	@Parameter(defaultValue = "${project.build.directory}/generated-wdjws")
 	private File sourceDestDir;
@@ -159,7 +160,7 @@ public class WDJWSMojo extends AbstractMojo {
 
 	}
 
-	public static final String PACKAGE_INFO = "@XmlSchema(namespace = \"@@NAMESPACE@@\", xmlns = { @XmlNs(namespaceURI = \"@@NAMESPACE@@\", prefix = \"wd\") }, elementFormDefault = javax.xml.bind.annotation.XmlNsForm.QUALIFIED)\n\n" + "package @@PACKAGE@@;\n\n" + "import javax.xml.bind.annotation.XmlNs;\n" + "import javax.xml.bind.annotation.XmlSchema;\n";
+	public static final String PACKAGE_INFO = "@XmlSchema(namespace = \"@@NAMESPACE@@\", xmlns = { @XmlNs(namespaceURI = \"@@NAMESPACE@@\", prefix = \"wd\") }, elementFormDefault = jakarta.xml.bind.annotation.XmlNsForm.QUALIFIED)\n\n" + "package @@PACKAGE@@;\n\n" + "import jakarta.xml.bind.annotation.XmlNs;\n" + "import jakarta.xml.bind.annotation.XmlSchema;\n";
 
 	public void execute() throws MojoExecutionException {
 		try {
@@ -352,7 +353,7 @@ public class WDJWSMojo extends AbstractMojo {
 		args.add("-wsdllocation");
 		args.add("file:/META-INF/wsdl/" + wsdlName + ".wsdl");
 		args.add("-target");
-		args.add("2.2");
+		args.add("3.0");
 		args.add("-B-npa");
 		args.add("-B-Xfluent-api");
 		args.add("-b");
@@ -379,7 +380,8 @@ public class WDJWSMojo extends AbstractMojo {
 		mvn.setDistributionManagement(project.getDistributionManagement());
 		mvn.setProperties(new Properties());
 		mvn.getProperties().setProperty("project.build.sourceEncoding", "UTF-8");
-
+		
+		addDependencies(mvn);
 		addCompile(mvn, jdkVersion);
 		addSources(mvn);
 
@@ -387,13 +389,29 @@ public class WDJWSMojo extends AbstractMojo {
 		new MavenXpp3Writer().write(new FileOutputStream(pomFile.toFile()), mvn);
 
 	}
+	
+	public static void addDependencies(Model mvn) throws IOException, XmlPullParserException {
+		Dependency dependency = new Dependency();
+		dependency.setGroupId("jakarta.xml.bind");
+		dependency.setArtifactId("jakarta.xml.bind-api");
+		dependency.setVersion("4.0.0");
+		dependency.setScope("provided");
+		mvn.addDependency(dependency);
+		
+		dependency = new Dependency();
+		dependency.setGroupId("jakarta.xml.ws");
+		dependency.setArtifactId("jakarta.xml.ws-api");
+		dependency.setVersion("4.0.0");
+		dependency.setScope("provided");
+		mvn.addDependency(dependency);
+	}
 
 	public static void addCompile(Model mvn, String jdkVersion) throws IOException, XmlPullParserException {
 		Plugin plugin = new Plugin();
 		mvn.getBuild().getPlugins().add(plugin);
 		plugin.setGroupId("org.apache.maven.plugins");
 		plugin.setArtifactId("maven-compiler-plugin");
-		plugin.setVersion("3.8.1");
+		plugin.setVersion("3.11.0");
 		PluginExecution execution = new PluginExecution();
 		plugin.addExecution(execution);
 
@@ -401,7 +419,7 @@ public class WDJWSMojo extends AbstractMojo {
 		execution.setPhase("compile");
 		execution.addGoal("compile");
 
-		//<skipMain>true</skipMain>
+		// <skipMain>true</skipMain>
 		StringBuilder pluginConfig = new StringBuilder("<configuration><release>").append(jdkVersion).append("</release></configuration>");
 		Xpp3Dom configuration = Xpp3DomBuilder.build(new ByteArrayInputStream(pluginConfig.toString().getBytes()), "UTF-8");
 		execution.setConfiguration(configuration);
@@ -430,9 +448,9 @@ public class WDJWSMojo extends AbstractMojo {
 		invocationRequest.setPomFile(serviceBaseDir.resolve("pom.xml").toFile());
 		invocationRequest.setGoals(goals);
 		invocationRequest.setDebug(session.getRequest().isShowErrors());
+		invocationRequest.setOutputHandler(new LogOutputHandler(getLog()));
 
 		Invoker invoker = new DefaultInvoker();
-		invoker.setOutputHandler(new LogOutputHandler(getLog()));
 
 		// execute:
 		InvocationResult invocationResult = invoker.execute(invocationRequest);

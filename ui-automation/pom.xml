@@ -18,21 +18,21 @@
 		<dependency>
 			<groupId>org.seleniumhq.selenium</groupId>
 			<artifactId>selenium-edge-driver</artifactId>
-			<version>4.4.0</version>
+			<version>4.9.0</version>
 			<scope>provided</scope>
 		</dependency>
 		
 		<dependency>
 			<groupId>org.seleniumhq.selenium</groupId>
 			<artifactId>selenium-chrome-driver</artifactId>
-			<version>4.4.0</version>
+			<version>4.9.0</version>
 			<scope>provided</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>org.seleniumhq.selenium</groupId>
 			<artifactId>selenium-firefox-driver</artifactId>
-			<version>4.4.0</version>
+			<version>4.9.0</version>
 			<scope>provided</scope>
 		</dependency>
 
@@ -40,7 +40,7 @@
 		<dependency>
 			<groupId>org.seleniumhq.selenium</groupId>
 			<artifactId>selenium-java</artifactId>
-			<version>4.4.0</version>
+			<version>4.9.0</version>
 		</dependency>
 
 	</dependencies>

@@ -3,16 +3,16 @@ package wdutil.wdjws.rest;
 import java.io.IOException;
 import java.util.Base64;
 
-import javax.ws.rs.client.ClientRequestContext;
-import javax.ws.rs.client.ClientRequestFilter;
-import javax.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.client.ClientRequestContext;
+import jakarta.ws.rs.client.ClientRequestFilter;
+import jakarta.ws.rs.core.MultivaluedMap;
 
-public class Authenticator implements ClientRequestFilter {
+public class BasicAuthenticator implements ClientRequestFilter {
 
 	private final String user;
 	private final String password;
 
-	public Authenticator(String user, String password) {
+	public BasicAuthenticator(String user, String password) {
 		this.user = user;
 		this.password = password;
 	}

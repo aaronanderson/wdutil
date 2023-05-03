@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns="http://java.sun.com/xml/ns/jaxb" xmlns:xjc="http://java.sun.com/xml/ns/jaxb/xjc" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:jxb="http://java.sun.com/xml/ns/jaxb" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
-	xmlns:jaxws="http://java.sun.com/xml/ns/jaxws">
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns="https://jakarta.ee/xml/ns/jaxb" xmlns:xjc="http://java.sun.com/xml/ns/jaxb/xjc" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:jxb="https://jakarta.ee/xml/ns/jaxb" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+	xmlns:jaxws="https://jakarta.ee/xml/ns/jaxws">
 
 	<xsl:param name="fileName" />
 	<xsl:param name="namespace" />
@@ -14,7 +14,7 @@
 
 
 	<xsl:template match="/">
-		<jaxws:bindings jxb:extensionBindingPrefixes="jaxws jxb xjc" version="2.0">
+		<jaxws:bindings jxb:extensionBindingPrefixes="jaxws jxb xjc" version="3.0">
 			<xsl:attribute name="wsdlLocation">
 						<xsl:text>src/main/resources/META-INF/wsdl/</xsl:text>
 					<xsl:value-of select="$fileName" />

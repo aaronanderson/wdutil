@@ -5,7 +5,7 @@ import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.time.format.DateTimeFormatter;
 
-import javax.xml.bind.annotation.adapters.XmlAdapter;
+import jakarta.xml.bind.annotation.adapters.XmlAdapter;
 
 //java.time adapters not available yet https://github.com/eclipse-ee4j/jaxb-ri/issues/1174
 public class XmlAdapters {

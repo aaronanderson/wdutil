@@ -1,15 +1,15 @@
 package wdutil.wdjws.rest;
 
 import java.io.ByteArrayInputStream;
-
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.TimeUnit;
 
-import javax.ws.rs.client.Client;
-import javax.ws.rs.client.ClientBuilder;
-import javax.ws.rs.client.Entity;
-import javax.ws.rs.core.Response;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.client.ClientBuilder;
+import jakarta.ws.rs.client.ClientRequestFilter;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.Response;
 
 public class Blobitory {
 
@@ -22,20 +22,18 @@ public class Blobitory {
 		return client;
 	}
 
-	public static void listBlobitory(String serviceHost, String uid, String clientId, String password) throws Exception {
+	public static void listBlobitory(String serviceHost, String clientId, ClientRequestFilter auth) throws Exception {
 
 		Client client = getClient();
-		Authenticator auth = new Authenticator(String.format("%s@%s", uid, clientId), password);
 		client.register(auth);
 
 		Response response = client.target(getBlobitoryURL(serviceHost, clientId)).request().header("X-Tenant", clientId).get();
 
 	}
 
-	public static void downloadFile(String fileURL, String uid, String clientId, String password, OutputStream out) throws Exception {
+	public static void downloadFile(String fileURL, String clientId, ClientRequestFilter auth, OutputStream out) throws Exception {
 
 		Client client = ClientBuilder.newClient();
-		Authenticator auth = new Authenticator(String.format("%s@%s", uid, clientId), password);
 		Response response = client.target(fileURL).register(auth).request().header("X-Tenant", clientId).get();
 		try (InputStream in = response.readEntity(InputStream.class);) {
 			int n;
@@ -50,9 +48,8 @@ public class Blobitory {
 		}
 	}
 
-	public static byte[] downloadFile(String fileURL, String uid, String clientId, String password) throws Exception {
+	public static byte[] downloadFile(String fileURL, String clientId, ClientRequestFilter auth) throws Exception {
 		Client client = ClientBuilder.newBuilder().connectTimeout(90, TimeUnit.SECONDS).readTimeout(90, TimeUnit.SECONDS).build();
-		Authenticator auth = new Authenticator(String.format("%s@%s", uid, clientId), password);
 		Response response = client.target(fileURL).register(auth).request().header("X-Tenant", clientId).get();
 		try {
 			return response.readEntity(byte[].class);
@@ -62,9 +59,8 @@ public class Blobitory {
 		}
 	}
 
-	public static byte[] uploadFile(String fileURL, byte[] contents, String mimeType, String uid, String clientId, String password) throws Exception {
+	public static byte[] uploadFile(String fileURL, byte[] contents, String mimeType, String clientId, ClientRequestFilter auth) throws Exception {
 		Client client = ClientBuilder.newBuilder().connectTimeout(90, TimeUnit.SECONDS).readTimeout(90, TimeUnit.SECONDS).build();
-		Authenticator auth = new Authenticator(String.format("%s@%s", uid, clientId), password);
 		Response response = client.target(fileURL).register(auth).request().header("X-Tenant", clientId).put(Entity.entity(new ByteArrayInputStream(contents), mimeType));
 		try {
 			return response.readEntity(byte[].class);

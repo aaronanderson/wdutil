@@ -1,11 +1,10 @@
 package wdutil.wdjrs.maven;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
@@ -57,308 +56,300 @@ import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.openapitools.codegen.ClientOptInput;
 import org.openapitools.codegen.DefaultGenerator;
 import org.openapitools.codegen.config.CodegenConfigurator;
+import org.openapitools.codegen.languages.JavaClientCodegen;
 
 @Mojo(name = "oapigen", defaultPhase = LifecyclePhase.GENERATE_SOURCES, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class WDJWRMojo extends AbstractMojo {
 
-    //Public site per Google search of "Workday REST API"
-    private static String WORKDAY_OPENAPI_URL = "https://community.workday.com/sites/default/files/file-hosting/restapi/index.html";
+	public static final Pattern NAME_FORMAT = Pattern.compile("([^_]+)_([^_]+)_([^_]+).*.json");
 
-    public static final Pattern JSON_HREF = Pattern.compile("href=\\'(.*/(\\w+)\\.json)\\'");
-    public static final Pattern NAME_FORMAT = Pattern.compile("([^_]+)_([^_]+)_?([\\d]+)?");
+	@Parameter(required = true)
+	private String wdVersion;
 
-    @Parameter(required = true)
-    private String wdVersion;
+	@Parameter(defaultValue = "${project.basedir}/src/specs")
+	private File localSpecsDirectory;
 
-    @Parameter(defaultValue = "${project.basedir}/src/specs")
-    private File localSpecsDirectory;
+	@Parameter
+	private String[] services;
 
-    @Parameter
-    private String[] services;
+	@Parameter
+	private String[] urls;
 
-    @Parameter
-    private Map aliases = new HashMap<>();
+	@Parameter
+	private Map aliases = new HashMap<>();
 
-    @Parameter(defaultValue = "false")
-    private boolean includeAPIVersion;
+	@Parameter(defaultValue = "false")
+	private boolean includeAPIVersion;
 
-    @Parameter(defaultValue = "com.workday")
-    private String packageName;
+	@Parameter(defaultValue = "com.workday")
+	private String packageName;
 
-    @Parameter(defaultValue = "${project.groupId}")
-    private String groupId;
+	@Parameter(defaultValue = "${project.groupId}")
+	private String groupId;
 
-    @Parameter
-    private String artifactId;
+	@Parameter
+	private String artifactId;
 
-    @Parameter
-    private String version;
+	@Parameter
+	private String version;
 
-    @Parameter(defaultValue = "8")
-    private String jdkVersion;
+	@Parameter(defaultValue = "8")
+	private String jdkVersion;
 
-    ////required for the buiild
+	//// required for the buiild
 
-    @Parameter(defaultValue = "${project.build.directory}/generated-wdrs")
-    private File sourceDestDir;
+	@Parameter(defaultValue = "${project.build.directory}/generated-wdrs")
+	private File sourceDestDir;
 
-    @Parameter(defaultValue = "${project}", readonly = true, required = true)
-    private MavenProject project;
+	@Parameter(defaultValue = "${project}", readonly = true, required = true)
+	private MavenProject project;
 
-    @Parameter(defaultValue = "${session}", readonly = true)
-    private MavenSession session;
+	@Parameter(defaultValue = "${session}", readonly = true)
+	private MavenSession session;
 
-    @Component
-    private MavenProjectHelper projectHelper;
+	@Component
+	private MavenProjectHelper projectHelper;
 
-    public void execute() throws MojoExecutionException {
-        try {
+	public void execute() throws MojoExecutionException {
+		try {
+			Set<String> serviceSet = services != null ? new HashSet<>(Arrays.asList(services)) : Collections.EMPTY_SET;
+			List<String> urlList = urls != null ? Arrays.asList(urls) : Collections.EMPTY_LIST;
 
-            Set<String> serviceSet = services != null ? new HashSet<>(Arrays.asList(services)) : new HashSet<>();
-            Map<String, Spec> latestSpecs = new HashMap<>();
+			Map<String, Spec> latestSpecs = new HashMap<>();
 
-            if (localSpecsDirectory.exists() && localSpecsDirectory.isDirectory() && localSpecsDirectory.list().length > 0) {//if (services != null && services.length > 0) {
-                loadSpecsFromLocal(serviceSet, latestSpecs);
-            } else {
-                loadSpecsFromWebsite(serviceSet, latestSpecs);
-            }
+			if (urls != null) {
+				loadSpecsFromWebsite(Arrays.asList(urls), serviceSet, latestSpecs);
+			} else if (localSpecsDirectory.exists() && localSpecsDirectory.isDirectory() && localSpecsDirectory.list().length > 0) {// if (services != null && services.length > 0) {
+				loadSpecsFromLocal(serviceSet, latestSpecs);
+			}
+			for (Spec spec : latestSpecs.values()) {
+				getLog().info(String.format("Processing spec file %s\n", spec.specURL));
+				String specFileName = spec.specURL.getPath().substring(spec.specURL.getPath().lastIndexOf("/") + 1);
+				String serviceName = aliases.containsKey(spec.specName) ? (String) aliases.get(spec.specName) : packageNameFormat(spec);
+				Path serviceBaseDir = sourceDestDir.toPath().resolve(serviceName);
+				Path specBaseDir = serviceBaseDir.resolve("src/main/resources/META-INF/openapi");
+				Files.createDirectories(specBaseDir);
+				Path specPath = specBaseDir.resolve(specFileName);
 
-            for (Spec spec : latestSpecs.values()) {
-                getLog().info(String.format("Processing spec file %s\n", spec.specURL));
-                String specFileName = spec.specURL.getPath().substring(spec.specURL.getPath().lastIndexOf("/") + 1);
-                String serviceName = aliases.containsKey(spec.specName) ? (String) aliases.get(spec.specName) : packageNameFormat(spec);
-                Path serviceBaseDir = sourceDestDir.toPath().resolve(serviceName);
-                Path specBaseDir = serviceBaseDir.resolve("src/main/resources/META-INF/openapi");
-                Files.createDirectories(specBaseDir);
-                Path specPath = specBaseDir.resolve(specFileName);
+				if ("file".equals(spec.specURL.getProtocol())) {
+					URLConnection fileConn = spec.specURL.openConnection();
+					Files.copy(fileConn.getInputStream(), specPath, StandardCopyOption.REPLACE_EXISTING);
+				} else {
+					HttpsURLConnection httpsConn = (HttpsURLConnection) spec.specURL.openConnection();
+					Files.copy(httpsConn.getInputStream(), specPath, StandardCopyOption.REPLACE_EXISTING);
+					httpsConn.disconnect();
+				}
 
-                if ("file".equals(spec.specURL.getProtocol())) {
-                    URLConnection fileConn = spec.specURL.openConnection();
-                    Files.copy(fileConn.getInputStream(), specPath, StandardCopyOption.REPLACE_EXISTING);
-                } else {
-                    HttpsURLConnection httpsConn = (HttpsURLConnection) spec.specURL.openConnection();
-                    Files.copy(httpsConn.getInputStream(), specPath, StandardCopyOption.REPLACE_EXISTING);
-                    httpsConn.disconnect();
-                }
+				generateOpenAPIClient(serviceName, specPath, serviceBaseDir);
+				// generatePOM(serviceBaseDir, serviceName, spec.specName);
+				invokePOM(serviceBaseDir);
 
-                generateOpenAPIClient(serviceName, specPath, serviceBaseDir);
-                //generatePOM(serviceBaseDir, serviceName, spec.specName);
-                invokePOM(serviceBaseDir);
+			}
 
-            }
+		} catch (Throwable e) {
+			throw new MojoExecutionException("wsimport error", e);
+		}
 
-        } catch (Throwable e) {
-            throw new MojoExecutionException("wsimport error", e);
-        }
+	}
 
-    }
+	public void loadSpecsFromLocal(Set<String> serviceSet, Map<String, Spec> latestSpecs) throws Exception {
+		List<File> files = Files.list(localSpecsDirectory.toPath()).filter(Files::isRegularFile).map(Path::toFile).collect(Collectors.toList());
+		for (File spec : files) {
+			addFilterSpec(spec.toPath().getFileName().toString(), spec.toURI().toURL(), serviceSet, latestSpecs);
+		}
 
-    public void loadSpecsFromLocal(Set<String> serviceSet, Map<String, Spec> latestSpecs) throws Exception {
-        List<File> files = Files.list(localSpecsDirectory.toPath()).filter(Files::isRegularFile).map(Path::toFile).collect(Collectors.toList());
-        for (File spec : files) {
-            addFilterSpec(spec.toPath().getFileName().toString(), spec.toURI().toURL(), serviceSet, latestSpecs);
-        }
+	}
 
-    }
+	public void loadSpecsFromWebsite(List<String> urlList, Set<String> serviceSet, Map<String, Spec> latestSpecs) throws Exception {
+		for (String url : urlList) {
+			URL specURL = new URI(url).toURL();
+			String fspecFileName = specURL.getPath();
+			int idx = fspecFileName.lastIndexOf('/');
+			if (idx > -1) {
+				fspecFileName = fspecFileName.substring(idx + 1);
+			}
+			addFilterSpec(fspecFileName, specURL, serviceSet, latestSpecs);
+		}
+	}
 
-    public void loadSpecsFromWebsite(Set<String> serviceSet, Map<String, Spec> latestSpecs) throws Exception {
+	private void addFilterSpec(String specFileName, URL specURL, Set<String> serviceSet, Map<String, Spec> latestSpecs) {
+		if (serviceSet.isEmpty() || serviceSet.stream().filter(s -> specFileName.contains(s)).findFirst().isPresent()) {
+			Matcher n = NAME_FORMAT.matcher(specFileName);
+			if (n.find()) {
+				String serviceName = n.group(1);
+				String majorVersion = n.group(2);
+				String minorVersion = n.group(3);
+				Spec currentSpec = latestSpecs.get(serviceName);
+				if (currentSpec == null || currentSpec.majorVersion.compareTo(majorVersion) < 0 || (currentSpec.minorVersion != null && minorVersion != null && currentSpec.minorVersion.compareTo(minorVersion) < 0)) {
+					Spec spec = new Spec(serviceName, majorVersion, minorVersion, specURL);
+					latestSpecs.put(spec.specName, spec);
+				}
 
-        URL WorkdayAPIURL = new URL(WORKDAY_OPENAPI_URL);
-        HttpsURLConnection indexConn = (HttpsURLConnection) WorkdayAPIURL.openConnection();
-        BufferedReader indexPage = new BufferedReader(new InputStreamReader(indexConn.getInputStream()));
+			}
+		}
 
-        String str = null;
-        out: while ((str = indexPage.readLine()) != null) {
-            Matcher m = JSON_HREF.matcher(str);
-            while (m.find()) {
-                String specPath = m.group(1);
-                URL specURL = new URL(WORKDAY_OPENAPI_URL.substring(0, WORKDAY_OPENAPI_URL.lastIndexOf('/')) + "/" + specPath);
-                final String fspecFileName = m.group(2);
-                addFilterSpec(fspecFileName, specURL, serviceSet, latestSpecs);
-            }
-        }
+	}
 
-        indexPage.close();
-        indexConn.disconnect();
-    }
+	private String packageNameFormat(Spec spec) {
+		StringBuilder packageName = new StringBuilder();
+		for (int i = 0; i < spec.specName.length(); i++) {
+			char c = spec.specName.charAt(i);
+			if (Character.isUpperCase(c)) {
+				if (i > 0) {
+					packageName.append('_');
+				}
+				packageName.append(Character.toLowerCase(c));
+			} else {
+				packageName.append(c);
+			}
+		}
+		if (includeAPIVersion) {
+			packageName.append('_');
+			packageName.append(spec.majorVersion);
+			if (spec.minorVersion != null) {
+				packageName.append('_');
+				packageName.append(spec.minorVersion);
+			}
+		}
+		return packageName.toString();
+	}
 
-    private void addFilterSpec(String specFileName, URL specURL, Set<String> serviceSet, Map<String, Spec> latestSpecs) {
-        if (serviceSet.isEmpty() || serviceSet.stream().filter(s -> specFileName.contains(s)).findFirst().isPresent()) {
-            String nspecFileName = specFileName.replaceAll("^curated_?", "");
-            Matcher n = NAME_FORMAT.matcher(nspecFileName);
-            if (n.find()) {
-                String serviceName = n.group(1);
-                String majorVersion = n.group(2);
-                String minorVersion = n.group(3);
-                Spec currentSpec = latestSpecs.get(serviceName);
-                if (currentSpec == null || currentSpec.majorVersion.compareTo(majorVersion) < 0 || (currentSpec.minorVersion != null && minorVersion != null && currentSpec.minorVersion.compareTo(minorVersion) < 0)) {
-                    Spec spec = new Spec(serviceName, majorVersion, minorVersion, specURL);
-                    latestSpecs.put(spec.specName, spec);
-                }
+	public static class Spec {
+		final URL specURL;
+		final String specName;
+		final String majorVersion;
+		final String minorVersion;
 
-            }
-        }
+		public Spec(String specName, String majorVersion, String minorVersion, URL specURL) {
+			this.specName = specName;
+			this.majorVersion = majorVersion;
+			this.minorVersion = minorVersion;
+			this.specURL = specURL;
+		}
 
-    }
+	}
 
-    private String packageNameFormat(Spec spec) {
-        StringBuilder packageName = new StringBuilder();
-        for (int i = 0; i < spec.specName.length(); i++) {
-            char c = spec.specName.charAt(i);
-            if (Character.isUpperCase(c)) {
-                if (i > 0) {
-                    packageName.append('_');
-                }
-                packageName.append(Character.toLowerCase(c));
-            } else {
-                packageName.append(c);
-            }
-        }
-        if (includeAPIVersion) {
-            packageName.append('_');
-            packageName.append(spec.majorVersion);
-            if (spec.minorVersion != null) {
-                packageName.append('_');
-                packageName.append(spec.minorVersion);
-            }
-        }
-        return packageName.toString();
-    }
+	public void generateOpenAPIClient(String serviceName, Path specPath, Path serviceBaseDir) throws IOException, ParserConfigurationException, TransformerException {
+		CodegenConfigurator configurator = new CodegenConfigurator();
+		configurator.setVerbose(false);
+		configurator.setGroupId(groupId);
+		configurator.setArtifactId(artifactId != null ? (artifactId + "-" + serviceName) : serviceName);
+		configurator.setArtifactVersion(version != null ? version : wdVersion);
 
-    public static class Spec {
-        final URL specURL;
-        final String specName;
-        final String majorVersion;
-        final String minorVersion;
+		configurator.setOutputDir(serviceBaseDir.toAbsolutePath().toString());
 
-        public Spec(String specName, String majorVersion, String minorVersion, URL specURL) {
-            this.specName = specName;
-            this.majorVersion = majorVersion;
-            this.minorVersion = minorVersion;
-            this.specURL = specURL;
-        }
+		configurator.setInputSpec(specPath.toAbsolutePath().toString());
+		configurator.setGeneratorName("java");
+		configurator.setLibrary(JavaClientCodegen.MICROPROFILE);
+		configurator.setInvokerPackage(String.format("%s.%s", packageName, serviceName));
+		configurator.setApiPackage(String.format("%s.%s.api", packageName, serviceName));
+		configurator.setModelPackage(String.format("%s.%s.model", packageName, serviceName));
 
-    }
+		configurator.setGenerateAliasAsModel(true);
+		configurator.addAdditionalProperty(JavaClientCodegen.MICROPROFILE_REST_CLIENT_VERSION, "3.0");
+		configurator.addAdditionalProperty("disableMultipart", true);
 
-    public void generateOpenAPIClient(String serviceName, Path specPath, Path serviceBaseDir) throws IOException, ParserConfigurationException, TransformerException {
-        CodegenConfigurator configurator = new CodegenConfigurator();
-        configurator.setVerbose(false);
-        configurator.setGroupId(groupId);
-        configurator.setArtifactId(artifactId != null ? (artifactId + "-" + serviceName) : serviceName);
-        configurator.setArtifactVersion(version != null ? version : wdVersion);
+		ClientOptInput input = configurator.toClientOptInput();
+		new DefaultGenerator().opts(input).generate();
 
-        configurator.setOutputDir(serviceBaseDir.toAbsolutePath().toString());
+	}
 
-        configurator.setInputSpec(specPath.toAbsolutePath().toString());
-        configurator.setGeneratorName("java");
-        configurator.setLibrary("microprofile");
-        configurator.setInvokerPackage(String.format("%s.%s", packageName, serviceName));
-        configurator.setApiPackage(String.format("%s.%s.api", packageName, serviceName));
-        configurator.setModelPackage(String.format("%s.%s.model", packageName, serviceName));
+	public void generatePOM(Path serviceBaseDir, String serviceName, String specName) throws IOException, XmlPullParserException {
+		Path pomFile = serviceBaseDir.resolve("pom.xml");
 
-        configurator.setGenerateAliasAsModel(true);
-        configurator.addAdditionalProperty("disableMultipart", true);
-        ClientOptInput input = configurator.toClientOptInput();
-        new DefaultGenerator().opts(input).generate();
+		Model mvn = new Model();
+		mvn.setModelVersion("4.0.0");
+		mvn.setGroupId(groupId);
+		mvn.setArtifactId(artifactId != null ? (artifactId + "-" + serviceName) : serviceName);
+		mvn.setVersion(version != null ? version : wdVersion);
+		mvn.setPackaging("jar");
+		mvn.setBuild(new Build());
+		mvn.getBuild().setExtensions(project.getBuild() != null ? project.getBuildExtensions() : Collections.EMPTY_LIST);
+		mvn.setDistributionManagement(project.getDistributionManagement());
+		mvn.setProperties(new Properties());
+		mvn.getProperties().setProperty("project.build.sourceEncoding", "UTF-8");
 
-    }
+		addCompile(mvn, jdkVersion);
+		addSources(mvn);
 
-    public void generatePOM(Path serviceBaseDir, String serviceName, String specName) throws IOException, XmlPullParserException {
-        Path pomFile = serviceBaseDir.resolve("pom.xml");
+		getLog().info(String.format("Writing Maven OpenAPI %s:%s:%s pom to file %s\n", mvn.getGroupId(), mvn.getArtifactId(), mvn.getVersion(), pomFile));
+		new MavenXpp3Writer().write(new FileOutputStream(pomFile.toFile()), mvn);
 
-        Model mvn = new Model();
-        mvn.setModelVersion("4.0.0");
-        mvn.setGroupId(groupId);
-        mvn.setArtifactId(artifactId != null ? (artifactId + "-" + serviceName) : serviceName);
-        mvn.setVersion(version != null ? version : wdVersion);
-        mvn.setPackaging("jar");
-        mvn.setBuild(new Build());
-        mvn.getBuild().setExtensions(project.getBuild() != null ? project.getBuildExtensions() : Collections.EMPTY_LIST);
-        mvn.setDistributionManagement(project.getDistributionManagement());
-        mvn.setProperties(new Properties());
-        mvn.getProperties().setProperty("project.build.sourceEncoding", "UTF-8");
+	}
 
-        addCompile(mvn, jdkVersion);
-        addSources(mvn);
+	public static void addCompile(Model mvn, String jdkVersion) throws IOException, XmlPullParserException {
+		Plugin plugin = new Plugin();
+		mvn.getBuild().getPlugins().add(plugin);
+		plugin.setGroupId("org.apache.maven.plugins");
+		plugin.setArtifactId("maven-compiler-plugin");
+		plugin.setVersion("3.11.0");
+		PluginExecution execution = new PluginExecution();
+		plugin.addExecution(execution);
 
-        getLog().info(String.format("Writing Maven WSDL %s:%s:%s pom to file %s\n", mvn.getGroupId(), mvn.getArtifactId(), mvn.getVersion(), pomFile));
-        new MavenXpp3Writer().write(new FileOutputStream(pomFile.toFile()), mvn);
+		execution.setId("default-compile");
+		execution.setPhase("compile");
+		execution.addGoal("compile");
 
-    }
+		// <skipMain>true</skipMain>
+		StringBuilder pluginConfig = new StringBuilder("<configuration><release>").append(jdkVersion).append("</release></configuration>");
+		Xpp3Dom configuration = Xpp3DomBuilder.build(new ByteArrayInputStream(pluginConfig.toString().getBytes()), "UTF-8");
+		execution.setConfiguration(configuration);
+	}
 
-    public static void addCompile(Model mvn, String jdkVersion) throws IOException, XmlPullParserException {
-        Plugin plugin = new Plugin();
-        mvn.getBuild().getPlugins().add(plugin);
-        plugin.setGroupId("org.apache.maven.plugins");
-        plugin.setArtifactId("maven-compiler-plugin");
-        plugin.setVersion("3.8.1");
-        PluginExecution execution = new PluginExecution();
-        plugin.addExecution(execution);
+	public static void addSources(Model mvn) throws IOException {
+		Plugin plugin = new Plugin();
+		mvn.getBuild().getPlugins().add(plugin);
+		plugin.setGroupId("org.apache.maven.plugins");
+		plugin.setArtifactId("maven-source-plugin");
+		plugin.setVersion("3.2.1");
+		PluginExecution execution = new PluginExecution();
+		plugin.addExecution(execution);
+		execution.setId("attach-sources");
+		execution.setPhase("verify");
+		execution.addGoal("jar-no-fork");
 
-        execution.setId("default-compile");
-        execution.setPhase("compile");
-        execution.addGoal("compile");
+	}
 
-        //<skipMain>true</skipMain>
-        StringBuilder pluginConfig = new StringBuilder("<configuration><release>").append(jdkVersion).append("</release></configuration>");
-        Xpp3Dom configuration = Xpp3DomBuilder.build(new ByteArrayInputStream(pluginConfig.toString().getBytes()), "UTF-8");
-        execution.setConfiguration(configuration);
-    }
+	public void invokePOM(Path serviceBaseDir) throws MavenInvocationException {
 
-    public static void addSources(Model mvn) throws IOException {
-        Plugin plugin = new Plugin();
-        mvn.getBuild().getPlugins().add(plugin);
-        plugin.setGroupId("org.apache.maven.plugins");
-        plugin.setArtifactId("maven-source-plugin");
-        plugin.setVersion("3.0.1");
-        PluginExecution execution = new PluginExecution();
-        plugin.addExecution(execution);
-        execution.setId("attach-sources");
-        execution.setPhase("verify");
-        execution.addGoal("jar-no-fork");
+		MavenExecutionRequest executionRequest = session.getRequest();
+		List<String> goals = executionRequest.getGoals();
+		InvocationRequest invocationRequest = new DefaultInvocationRequest();
+		invocationRequest.setBatchMode(true);
+		invocationRequest.setPomFile(serviceBaseDir.resolve("pom.xml").toFile());
+		invocationRequest.setGoals(goals);
+		invocationRequest.setDebug(session.getRequest().isShowErrors());
+		invocationRequest.setOutputHandler(new LogOutputHandler(getLog()));
 
-    }
+		Invoker invoker = new DefaultInvoker();
 
-    public void invokePOM(Path serviceBaseDir) throws MavenInvocationException {
+		// execute:
+		InvocationResult invocationResult = invoker.execute(invocationRequest);
+		if (invocationResult.getExitCode() != 0) {
+			throw new MavenInvocationException("OpenAPI pom invocation failed");
+		}
+	}
 
-        MavenExecutionRequest executionRequest = session.getRequest();
-        List<String> goals = executionRequest.getGoals();
-        InvocationRequest invocationRequest = new DefaultInvocationRequest();
-        invocationRequest.setBatchMode(true);
-        invocationRequest.setPomFile(serviceBaseDir.resolve("pom.xml").toFile());
-        invocationRequest.setGoals(goals);
-        invocationRequest.setDebug(session.getRequest().isShowErrors());
+	public static class LogOutputHandler implements InvocationOutputHandler {
+		private Log log;
 
-        Invoker invoker = new DefaultInvoker();
-        invoker.setOutputHandler(new LogOutputHandler(getLog()));
+		public LogOutputHandler(Log log) {
+			this.log = log;
+		}
 
-        // execute:
-        InvocationResult invocationResult = invoker.execute(invocationRequest);
-        if (invocationResult.getExitCode() != 0) {
-            throw new MavenInvocationException("OpenAPI pom invocation failed");
-        }
-    }
+		@Override
+		public void consumeLine(String line) {
+			if (line.startsWith("[INFO]")) {
+				log.info(line.substring(6));
+			} else if (line.startsWith("[WARNING]")) {
+				log.warn(line.substring(9));
+			} else if (line.startsWith("[ERROR]")) {
+				log.error(line.substring(7));
+			} else if (line.startsWith("[DEBUG]")) {
+				log.debug(line.substring(7));
+			}
 
-    public static class LogOutputHandler implements InvocationOutputHandler {
-        private Log log;
+		}
 
-        public LogOutputHandler(Log log) {
-            this.log = log;
-        }
-
-        @Override
-        public void consumeLine(String line) {
-            if (line.startsWith("[INFO]")) {
-                log.info(line.substring(6));
-            } else if (line.startsWith("[WARNING]")) {
-                log.warn(line.substring(9));
-            } else if (line.startsWith("[ERROR]")) {
-                log.error(line.substring(7));
-            } else if (line.startsWith("[DEBUG]")) {
-                log.debug(line.substring(7));
-            }
-
-        }
-
-    }
+	}
 }
