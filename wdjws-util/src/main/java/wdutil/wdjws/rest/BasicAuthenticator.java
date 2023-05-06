@@ -6,6 +6,7 @@ import java.util.Base64;
 import jakarta.ws.rs.client.ClientRequestContext;
 import jakarta.ws.rs.client.ClientRequestFilter;
 import jakarta.ws.rs.core.MultivaluedMap;
+import wdutil.wdjws.TenantInfo;
 
 public class BasicAuthenticator implements ClientRequestFilter {
 
@@ -31,6 +32,13 @@ public class BasicAuthenticator implements ClientRequestFilter {
         } catch (IllegalArgumentException ex) {
             throw new IOException(ex);
         }
+    }
+
+    public static final ClientRequestFilter authenticator(TenantInfo info) {
+        if (info.getTokenProvider() != null) {
+            return new BearerAuthenticator(info.getTokenProvider());
+        }       
+        return new BasicAuthenticator(info.getUserId(), info.getTenantId(), info.getPassword());
     }
 
 }
