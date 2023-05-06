@@ -12,7 +12,7 @@ public class TenantInfo {
     final String password;
     final X509Certificate cert;
     final byte[] secretKey;
-    final Supplier<?> oauthTokenProvider;
+    final Supplier<String> tokenProvider;
     int batchSize = 999;
     int timeout = 90000;
     boolean trace = false;
@@ -26,7 +26,7 @@ public class TenantInfo {
         this.password = password;
         this.cert = null;
         this.secretKey = null;
-        this.oauthTokenProvider = null;
+        this.tokenProvider = null;
     }
 
     public TenantInfo(String name, String tenantId, String userId, Environment<?> env, String version, X509Certificate cert, byte[] secretKey) {
@@ -38,10 +38,10 @@ public class TenantInfo {
         this.password = null;
         this.cert = cert;
         this.secretKey = secretKey;
-        this.oauthTokenProvider = null;
+        this.tokenProvider = null;
     }
 
-    public TenantInfo(String name, String tenantId, Environment<?> env, String version, Supplier<?> oauthTokenProvider) {
+    public TenantInfo(String name, String tenantId, Environment<?> env, String version, Supplier<String> tokenProvider) {
         this.name = name;
         this.tenantId = tenantId;
         this.env = env;
@@ -50,7 +50,7 @@ public class TenantInfo {
         this.password = null;
         this.cert = null;
         this.secretKey = null;
-        this.oauthTokenProvider = oauthTokenProvider;
+        this.tokenProvider = tokenProvider;
 
     }
 
@@ -77,6 +77,10 @@ public class TenantInfo {
 
     public String getPassword() {
         return password;
+    }       
+
+    public Supplier<String> getOauthTokenProvider() {
+        return tokenProvider;
     }
 
     public X509Certificate getCert() {
