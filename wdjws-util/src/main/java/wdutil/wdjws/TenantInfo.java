@@ -79,7 +79,7 @@ public class TenantInfo {
         return password;
     }       
 
-    public Supplier<String> getOauthTokenProvider() {
+    public Supplier<String> getTokenProvider() {
         return tokenProvider;
     }
 
