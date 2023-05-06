@@ -142,12 +142,12 @@ public class WSUtil {
 		binding.setHandlerChain(handlers);
 	}
 
-	public static void setOAuthAuthorization(Object port, Supplier<String> accessTokenProvider) {
+	public static void setTokenAuthorization(Object port, Supplier<String> tokenProvider) {
 		Binding binding = ((BindingProvider) port).getBinding();
 		List handlers = binding.getHandlerChain();
 		if (handlers == null)
 			handlers = new ArrayList();
-		OAuthHandler oAuthHandler = new OAuthHandler(accessTokenProvider);
+		TokenHandler oAuthHandler = new TokenHandler(tokenProvider);
 		handlers.add(oAuthHandler);
 		binding.setHandlerChain(handlers);
 	}
@@ -624,12 +624,12 @@ public class WSUtil {
 
 	}
 
-	public static class OAuthHandler implements SOAPHandler<SOAPMessageContext> {
+	public static class TokenHandler implements SOAPHandler<SOAPMessageContext> {
 
-		private final Supplier<String> accessTokenProvider;
+		private final Supplier<String> tokenProvider;
 
-		public OAuthHandler(Supplier<String> accessTokenProvider) {
-			this.accessTokenProvider = accessTokenProvider;
+		public TokenHandler(Supplier<String> tokenProvider) {
+			this.tokenProvider = tokenProvider;
 		}
 
 		public boolean handleMessage(SOAPMessageContext msgCtx) {
@@ -652,8 +652,8 @@ public class WSUtil {
 			if (null == headers) {
 				headers = new HashMap<String, List<String>>();
 			}
-			String accessToken = accessTokenProvider.get();
-			headers.put("Authorization", Collections.singletonList(String.format("Bearer %s", accessToken)));
+			String token = tokenProvider.get();
+			headers.put("Authorization", Collections.singletonList(String.format("Bearer %s", token)));
 
 			context.put(MessageContext.HTTP_REQUEST_HEADERS, headers);
 		}
