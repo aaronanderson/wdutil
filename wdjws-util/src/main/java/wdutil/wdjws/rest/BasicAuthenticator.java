@@ -19,7 +19,7 @@ public class BasicAuthenticator implements ClientRequestFilter {
     }
 
     public BasicAuthenticator(String user, String tenantId, String password) {
-        this.user = String.format("%s@%s", tenantId, user);
+        this.user = String.format("%s@%s", user, tenantId);
         this.password = password;
     }
 
@@ -37,7 +37,7 @@ public class BasicAuthenticator implements ClientRequestFilter {
     public static final ClientRequestFilter authenticator(TenantInfo info) {
         if (info.getTokenProvider() != null) {
             return new BearerAuthenticator(info.getTokenProvider());
-        }       
+        }
         return new BasicAuthenticator(info.getUserId(), info.getTenantId(), info.getPassword());
     }
 

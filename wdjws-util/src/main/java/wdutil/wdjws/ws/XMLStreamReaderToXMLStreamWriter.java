@@ -44,7 +44,7 @@ package wdutil.wdjws.ws;
 
 
 import javax.xml.XMLConstants;
-//import javax.xml.bind.attachment.AttachmentMarshaller;
+//import jakarta.xml.bind.attachment.AttachmentMarshaller;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
