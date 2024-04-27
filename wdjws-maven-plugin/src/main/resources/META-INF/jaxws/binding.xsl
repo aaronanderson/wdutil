@@ -10,17 +10,13 @@
 	<xsl:strip-space elements="*" />
 
 
-
-
-
 	<xsl:template match="/">
 		<jaxws:bindings jxb:extensionBindingPrefixes="jaxws jxb xjc" version="3.0">
 			<xsl:attribute name="wsdlLocation">
-						<xsl:text>src/main/resources/META-INF/wsdl/</xsl:text>
-					<xsl:value-of select="$fileName" />
-					 <xsl:text>.wsdl</xsl:text>
-					 </xsl:attribute>
-
+				<xsl:text>src/main/resources/META-INF/wsdl/</xsl:text>
+				<xsl:value-of select="$fileName" />
+				<xsl:text>.wsdl</xsl:text>
+			</xsl:attribute>
 
 
 			<jaxws:enableWrapperStyle>false</jaxws:enableWrapperStyle>
@@ -30,23 +26,23 @@
 				<jaxws:package>
 					<xsl:attribute name="name">
 						<xsl:value-of select="$pkgName" />
-					 	<xsl:text>.ws</xsl:text>
-					 </xsl:attribute>
+						<xsl:text>.ws</xsl:text>
+					</xsl:attribute>
 				</jaxws:package>
 			</jaxws:bindings>
 
 			<jxb:bindings>
 				<xsl:attribute name="node">
-						<xsl:text>wsdl:definitions/wsdl:types/xsd:schema[@targetNamespace='</xsl:text>
-						<xsl:value-of select="$namespace" />
-					 	<xsl:text>']</xsl:text>
-					 </xsl:attribute>
+					<xsl:text>wsdl:definitions/wsdl:types/xsd:schema[@targetNamespace='</xsl:text>
+					<xsl:value-of select="$namespace" />
+					<xsl:text>']</xsl:text>
+				</xsl:attribute>
 				<jxb:schemaBindings>
 					<jxb:package>
 						<xsl:attribute name="name">
-						<xsl:value-of select="$pkgName" />
-					 	<xsl:text>.xml</xsl:text>
-					 </xsl:attribute>
+							<xsl:value-of select="$pkgName" />
+							<xsl:text>.xml</xsl:text>
+						</xsl:attribute>
 					</jxb:package>
 				</jxb:schemaBindings>
 				<jxb:globalBindings generateElementProperty="false">
@@ -59,7 +55,7 @@
 					<xjc:javaType name="java.time.LocalDate" xmlType="xsd:date">
 						<xsl:attribute name="adapter">
 							<xsl:value-of select="concat($pkgName, '.XmlAdapters.DateAdapter')" />
-					</xsl:attribute>
+						</xsl:attribute>
 					</xjc:javaType>
 					<xjc:javaType name="java.time.OffsetTime" xmlType="xsd:time">
 						<xsl:attribute name="adapter">
@@ -88,7 +84,7 @@
 			</xsl:attribute>
 			<jxb:class>
 				<xsl:attribute name="name">
-                    <xsl:value-of select="substring(@name, 0, string-length(@name) -3)" />									
+					<xsl:value-of select="substring(@name, 0, string-length(@name) -3)" />
 				</xsl:attribute>
 			</jxb:class>
 		</jxb:bindings>

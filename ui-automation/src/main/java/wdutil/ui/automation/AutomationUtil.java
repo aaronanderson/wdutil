@@ -629,7 +629,7 @@ public class AutomationUtil {
                         key.reset();
                     }
                 }
-                throw new IOException(String.format("Download file unavailable after %d seconds", timeout.toMillis() * 1000));
+                throw new IOException(String.format("Download file unavailable after %d milliseconds", timeout.toMillis() * 1000));
             } catch (InterruptedException e) {
 
             }

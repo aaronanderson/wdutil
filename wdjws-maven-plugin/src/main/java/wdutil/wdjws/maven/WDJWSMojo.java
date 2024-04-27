@@ -74,411 +74,434 @@ import com.sun.tools.ws.WsImport;
 @Mojo(name = "wsimport", defaultPhase = LifecyclePhase.GENERATE_SOURCES, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class WDJWSMojo extends AbstractMojo {
 
-	// Public Web Services -> Web Service -> view URLs -> REST Workday XML
-
-	@Parameter(required = true)
-	private URL wdTenantServiceURL;
-
-	@Parameter(required = true)
-	private String wdVersion;
-
-	@Parameter(defaultValue = "${project.basedir}/Public_Web_Services.xml")
-	private File wdWebServiceReport;
-
-	@Parameter
-	private String[] services;
-
-	@Parameter
-	private Map aliases;
-
-	@Parameter(defaultValue = "com.workday")
-	private String packageName;
-
-	@Parameter(defaultValue = "${project.groupId}")
-	private String groupId;
-
-	@Parameter
-	private String artifactId;
-
-	@Parameter
-	private String version;
-
-	@Parameter(defaultValue = "11")
-	private String jdkVersion;
-
-	//// required for the buiild
-
-	@Parameter(defaultValue = "${project.build.directory}/generated-wdjws")
-	private File sourceDestDir;
-
-	@Parameter(defaultValue = "${project}", readonly = true, required = true)
-	private MavenProject project;
-
-	@Parameter(defaultValue = "${session}", readonly = true)
-	private MavenSession session;
-
-	@Component
-	private MavenProjectHelper projectHelper;
-
-	public static final Map<String, String> DEFAULT_ALIASES;
-
-	static {
-		Map<String, String> map = new HashMap<String, String>();
-		map.put("Absence_Management", "absence");
-		map.put("Academic_Advising", "academicadvising");
-		map.put("Academic_Foundation", "academicfoundation");
-		map.put("Benefits_Administration", "benefits");
-		map.put("Cash_Management", "cash");
-		map.put("Compensation", "comp");
-		map.put("Compensation_Review", "compreview");
-		map.put("Financial_Management", "financial");
-		map.put("Identity_Management", "identity");
-		map.put("Professional_Services_Automation", "ps");
-		map.put("Revenue_Management", "revenue");
-		map.put("Workforce_Planning", "workforce");
-		map.put("External_Integrations", "extintsys");
-		map.put("Human_Resources", "hr");
-		map.put("Integrations", "intsys");
-		map.put("Payroll_Interface", "pi");
-		map.put("Performance_Management", "performance");
-		map.put("Resource_Management", "resource");
-		map.put("Time_Tracking", "timetracking");
-		map.put("Academic_Foundation", "academic");
-		map.put("Campus_Engagement", "campus");
-		map.put("Payroll_GBR", "gbrpayroll");
-		map.put("payroll_FRA", "frapayroll");
-		map.put("Professional_Services_Automation", "psa");
-		map.put("Settlement_Services", "settlementservices");
-		map.put("Student_Finance", "studentfinance");
-		map.put("Student_Records", "studentrecords");
-		map.put("Student_Recruiting", "studentrecruiting");
-		map.put("Financial_Aid", "financialaid");
-		map.put("Tenant_Data_Translation", "datatrans");
-		map.put("Dynamic_Document_Generation", "dyndocgen");
-		map.put("Workday_Connect", "wdconnect");
-		DEFAULT_ALIASES = Collections.unmodifiableMap(map);
-
-	}
-
-	public static final String PACKAGE_INFO = "@XmlSchema(namespace = \"@@NAMESPACE@@\", xmlns = { @XmlNs(namespaceURI = \"@@NAMESPACE@@\", prefix = \"wd\") }, elementFormDefault = jakarta.xml.bind.annotation.XmlNsForm.QUALIFIED)\n\n" + "package @@PACKAGE@@;\n\n" + "import jakarta.xml.bind.annotation.XmlNs;\n" + "import jakarta.xml.bind.annotation.XmlSchema;\n";
-
-	public void execute() throws MojoExecutionException {
-		try {
-
-			List<WSDL> wsdls = null;
-			if (services != null && services.length > 0) {
-				wsdls = loadWSDLFromOptions();
-			} else {
-				wsdls = loadWSDLFromReport();
-			}
-
-			Map<String, String> serviceAliases = DEFAULT_ALIASES;
-			if (aliases != null && !aliases.isEmpty()) {
-				serviceAliases = aliases;
-			}
-
-			for (WSDL wsdl : wsdls) {
-				String wsdlFileName = wsdl.wsdlName + ".wsdl";
-				String serviceName = serviceAliases.get(wsdl.wsdlName) != null ? (String) serviceAliases.get(wsdl.wsdlName) : wsdl.wsdlName.toLowerCase();
-				Path serviceBaseDir = sourceDestDir.toPath().resolve(serviceName);
-				Path wsdlBaseDir = serviceBaseDir.resolve("src/main/resources/META-INF/wsdl");
-				Files.createDirectories(wsdlBaseDir);
-				Path wsdlPath = wsdlBaseDir.resolve(wsdlFileName);
-				getLog().info(String.format("Downloading WSDL %s to file %s\n", wsdl.wsdlURL, wsdlPath));
-
-				HttpsURLConnection wsdlConn = (HttpsURLConnection) wsdl.wsdlURL.openConnection();
-				Files.copy(wsdlConn.getInputStream(), wsdlPath, StandardCopyOption.REPLACE_EXISTING);
-
-				setupService(serviceBaseDir, serviceName, wsdl.wsdlName);
-				generateBindingFile(serviceBaseDir, serviceName, wsdl.wsdlName);
-				executeJAXWSImport(serviceBaseDir, serviceName, wsdl.wsdlName);
-				generatePOM(serviceBaseDir, serviceName, wsdl.wsdlName);
-				invokePOM(serviceBaseDir, serviceName, wsdl.wsdlName);
-
-			}
-
-		} catch (Throwable e) {
-			throw new MojoExecutionException("wsimport error", e);
-		}
-
-	}
-
-	public List<WSDL> loadWSDLFromReport() throws Exception {
-		List<WSDL> wsdlURLs = new LinkedList<>();
-
-		XPathFactory xpf = XPathFactory.newInstance();
-		XPath xp = xpf.newXPath();
-		xp.setNamespaceContext(new NamespaceContext() {
-
-			@Override
-			public Iterator getPrefixes(String namespaceURI) {
-				return null;
-			}
-
-			@Override
-			public String getPrefix(String namespaceURI) {
-				return null;
-			}
-
-			@Override
-			public String getNamespaceURI(String prefix) {
-				if ("ws".equals(prefix)) {
-					return "urn:com.workday.report/Public_Web_Services";
-				}
-				return XMLConstants.NULL_NS_URI;
-			}
-		});
-		DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-		dbf.setNamespaceAware(true);
-		DocumentBuilder db = dbf.newDocumentBuilder();
-		Document doc = db.parse(wdWebServiceReport);
-		NodeList defs = (NodeList) xp.evaluate("//ws:Web_Service/@ws:Descriptor", doc.getDocumentElement(), XPathConstants.NODESET);
-		for (int i = 0; i < defs.getLength(); i++) {
-			String service = ((Attr) defs.item(i)).getTextContent();
-			if (service.contains("(Do Not Use)")) {
-				continue;
-			}
-			service = service.substring(0, service.length() - 9).replaceAll("\\s", "_");
-			String wsdl = String.format("%s/%s/%s?wsdl", wdTenantServiceURL, service, wdVersion.startsWith("v") ? wdVersion : "v" + wdVersion);
-			wsdlURLs.add(new WSDL(service, new URL(wsdl)));
-		}
-		return wsdlURLs;
-	}
-
-	public List<WSDL> loadWSDLFromOptions() throws Exception {
-		List<WSDL> wsdlURLs = new LinkedList<>();
-		for (String service : services) {
-			String wsdl = String.format("%s/%s/%s?wsdl", wdTenantServiceURL, service, wdVersion.startsWith("v") ? wdVersion : "v" + wdVersion);
-			wsdlURLs.add(new WSDL(service, new URL(wsdl)));
-		}
-		return wsdlURLs;
-	}
-
-	public static class WSDL {
-		URL wsdlURL;
-		String wsdlName;
-
-		public WSDL(String wsdlName, URL wsdlURL) {
-			this.wsdlURL = wsdlURL;
-			this.wsdlName = wsdlName;
-		}
-
-	}
-
-	public void setupService(Path serviceBaseDir, String serviceName, String wsdlName) throws IOException, ParserConfigurationException, TransformerException {
-		Path packageBaseDirectory = serviceBaseDir.resolve("src/main/java");
-
-		String servicePackageName = packageName + "." + serviceName;
-		String servicePackageXMLName = servicePackageName + ".xml";
-		Path packageDirectory = packageBaseDirectory.resolve(servicePackageXMLName.replaceAll("\\.", "/"));
-
-		Files.createDirectories(packageDirectory);
-		Path packageFile = packageDirectory.resolve("package-info.java");
-		getLog().info(String.format("Creating package file %s\n", packageFile));
-		String fileContents = PACKAGE_INFO.replace("@@PACKAGE@@", servicePackageXMLName);
-		fileContents = fileContents.replace("@@NAMESPACE@@", "urn:com.workday/bsvc");
-		Files.copy(new ByteArrayInputStream(fileContents.getBytes()), packageFile, StandardCopyOption.REPLACE_EXISTING);
-
-		Path xmlAdaptersFile = packageDirectory.resolve("XmlAdapters.java");
-		InputStream is = getClass().getResourceAsStream("/META-INF/jaxws/XmlAdapters.java");
-		StringBuilder sb = new StringBuilder(2048);
-		char[] read = new char[128];
-		try (InputStreamReader ir = new InputStreamReader(is, StandardCharsets.UTF_8)) {
-			for (int i = 0; -1 != (i = ir.read(read));) {
-				sb.append(read, 0, i);
-			}
-
-		}
-		fileContents = sb.toString().replace("@@PACKAGE@@", servicePackageName);
-		getLog().info(String.format("Writing XmlAdapter to file %s\n", xmlAdaptersFile));
-		Files.copy(new ByteArrayInputStream(fileContents.getBytes()), xmlAdaptersFile, StandardCopyOption.REPLACE_EXISTING);
-
-		DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-		DocumentBuilder db = dbf.newDocumentBuilder();
-
-		Document cat = db.newDocument();
-		Element catalog = cat.createElement("catalog");
-		cat.appendChild(catalog);
-		catalog.setAttribute("xmlns", "urn:oasis:names:tc:entity:xmlns:xml:catalog");// avoid setting up DOM namespace awareness
-		catalog.setAttribute("prefer", "system");
-
-		Element system = cat.createElement("system");
-		String wsdlFileName = wsdlName + ".wsdl";
-		system.setAttribute("systemId", "file:/META-INF/wsdl/" + wsdlFileName);
-		system.setAttribute("uri", "wsdl/" + wsdlFileName);
-		catalog.appendChild(system);
-
-		Path catalogFile = serviceBaseDir.resolve("src/main/resources/META-INF/jax-ws-catalog.xml");
-		TransformerFactory tf = TransformerFactory.newInstance();
-		Transformer t = tf.newTransformer();
-		t.setOutputProperty(OutputKeys.INDENT, "yes");
-		getLog().info(String.format("Writing catalog to file %s\n", catalogFile));
-		Files.createDirectories(catalogFile.getParent());
-		t.transform(new DOMSource(cat), new StreamResult(catalogFile.toFile()));
-
-	}
-
-	public void generateBindingFile(Path serviceBaseDir, String serviceName, String wsdlName) throws IOException, TransformerException {
-		String servicePackageName = packageName + "." + serviceName;
-		String wsdlFileName = wsdlName + ".wsdl";
-
-		TransformerFactory tFactory = TransformerFactory.newInstance();
-		StreamSource stylesource = new StreamSource(getClass().getResourceAsStream("/META-INF/jaxws/binding.xsl"));
-		Transformer transformer = tFactory.newTransformer(stylesource);
-		transformer.setOutputProperty(OutputKeys.INDENT, "yes");
-		transformer.setParameter("pkgName", servicePackageName);
-		transformer.setParameter("fileName", wsdlName);
-		transformer.setParameter("namespace", "urn:com.workday/bsvc");
-
-		Path bindingFile = serviceBaseDir.resolve(wsdlFileName.replace(".wsdl", ".jaxws"));
-		StreamSource source = new StreamSource(serviceBaseDir.resolve("src/main/resources/META-INF/wsdl").resolve(wsdlFileName).toFile());
-		StreamResult result = new StreamResult(bindingFile.toFile());
-		getLog().info(String.format("Generating JAX-WS binding to file %s\n", bindingFile));
-		transformer.transform(source, result);
-	}
-
-	public void executeJAXWSImport(Path serviceBaseDir, String serviceName, String wsdlName) throws Throwable {
-		List<String> args = new LinkedList<>();
-		Path classesDirectory = serviceBaseDir.resolve("target/classes");
-		Files.createDirectories(classesDirectory);
-		args.add("-keep");
-		args.add("-s");
-		args.add(serviceBaseDir.resolve("src/main/java").toString());
-		args.add("-d");
-		args.add(classesDirectory.toString());
-		args.add("-extension");
-		args.add("-Xnocompile");
-		args.add("-catalog");
-		args.add(serviceBaseDir.resolve("src/main/resources/META-INF/jax-ws-catalog.xml").toString());
-		args.add("-wsdllocation");
-		args.add("file:/META-INF/wsdl/" + wsdlName + ".wsdl");
-		args.add("-target");
-		args.add("3.0");
-		args.add("-B-npa");
-		args.add("-B-Xfluent-api");
-		args.add("-b");
-		args.add(serviceBaseDir.resolve(wsdlName + ".jaxws").toString());
-		args.add(serviceBaseDir.resolve("src/main/resources/META-INF/wsdl/" + wsdlName + ".wsdl").toString());
-		getLog().info(String.format("Invoking wsimport with arguments %s\n", args));
-		int result = WsImport.doMain(args.toArray(new String[args.size()]));
-		if (result != 0) {
-			throw new Exception("wsimport failed");
-		}
-	}
-
-	public void generatePOM(Path serviceBaseDir, String serviceName, String wsdlName) throws IOException, XmlPullParserException {
-		Path pomFile = serviceBaseDir.resolve("pom.xml");
-
-		Model mvn = new Model();
-		mvn.setModelVersion("4.0.0");
-		mvn.setGroupId(groupId);
-		mvn.setArtifactId(artifactId != null ? (artifactId + "-" + serviceName) : serviceName);
-		mvn.setVersion(version != null ? version : wdVersion);
-		mvn.setPackaging("jar");
-		mvn.setBuild(new Build());
-		mvn.getBuild().setExtensions(project.getBuild() != null ? project.getBuildExtensions() : Collections.EMPTY_LIST);
-		mvn.setDistributionManagement(project.getDistributionManagement());
-		mvn.setProperties(new Properties());
-		mvn.getProperties().setProperty("project.build.sourceEncoding", "UTF-8");
-		
-		addDependencies(mvn);
-		addCompile(mvn, jdkVersion);
-		addSources(mvn);
-
-		getLog().info(String.format("Writing Maven WSDL %s:%s:%s pom to file %s\n", mvn.getGroupId(), mvn.getArtifactId(), mvn.getVersion(), pomFile));
-		new MavenXpp3Writer().write(new FileOutputStream(pomFile.toFile()), mvn);
-
-	}
-	
-	public static void addDependencies(Model mvn) throws IOException, XmlPullParserException {
-		Dependency dependency = new Dependency();
-		dependency.setGroupId("jakarta.xml.bind");
-		dependency.setArtifactId("jakarta.xml.bind-api");
-		dependency.setVersion("4.0.0");
-		dependency.setScope("provided");
-		mvn.addDependency(dependency);
-		
-		dependency = new Dependency();
-		dependency.setGroupId("jakarta.xml.ws");
-		dependency.setArtifactId("jakarta.xml.ws-api");
-		dependency.setVersion("4.0.0");
-		dependency.setScope("provided");
-		mvn.addDependency(dependency);
-	}
-
-	public static void addCompile(Model mvn, String jdkVersion) throws IOException, XmlPullParserException {
-		Plugin plugin = new Plugin();
-		mvn.getBuild().getPlugins().add(plugin);
-		plugin.setGroupId("org.apache.maven.plugins");
-		plugin.setArtifactId("maven-compiler-plugin");
-		plugin.setVersion("3.11.0");
-		PluginExecution execution = new PluginExecution();
-		plugin.addExecution(execution);
-
-		execution.setId("default-compile");
-		execution.setPhase("compile");
-		execution.addGoal("compile");
-
-		// <skipMain>true</skipMain>
-		StringBuilder pluginConfig = new StringBuilder("<configuration><release>").append(jdkVersion).append("</release></configuration>");
-		Xpp3Dom configuration = Xpp3DomBuilder.build(new ByteArrayInputStream(pluginConfig.toString().getBytes()), "UTF-8");
-		execution.setConfiguration(configuration);
-	}
-
-	public static void addSources(Model mvn) throws IOException {
-		Plugin plugin = new Plugin();
-		mvn.getBuild().getPlugins().add(plugin);
-		plugin.setGroupId("org.apache.maven.plugins");
-		plugin.setArtifactId("maven-source-plugin");
-		plugin.setVersion("3.2.1");
-		PluginExecution execution = new PluginExecution();
-		plugin.addExecution(execution);
-		execution.setId("attach-sources");
-		execution.setPhase("verify");
-		execution.addGoal("jar-no-fork");
-
-	}
-
-	public void invokePOM(Path serviceBaseDir, String serviceName, String wsdlName) throws MavenInvocationException {
-
-		MavenExecutionRequest executionRequest = session.getRequest();
-		List<String> goals = executionRequest.getGoals();
-		InvocationRequest invocationRequest = new DefaultInvocationRequest();
-		invocationRequest.setBatchMode(true);
-		invocationRequest.setPomFile(serviceBaseDir.resolve("pom.xml").toFile());
-		invocationRequest.setGoals(goals);
-		invocationRequest.setDebug(session.getRequest().isShowErrors());
-		invocationRequest.setOutputHandler(new LogOutputHandler(getLog()));
-
-		Invoker invoker = new DefaultInvoker();
-
-		// execute:
-		InvocationResult invocationResult = invoker.execute(invocationRequest);
-		if (invocationResult.getExitCode() != 0) {
-			throw new MavenInvocationException("WSDL pom invocation failed");
-		}
-	}
-
-	public static class LogOutputHandler implements InvocationOutputHandler {
-		private Log log;
-
-		public LogOutputHandler(Log log) {
-			this.log = log;
-		}
-
-		@Override
-		public void consumeLine(String line) {
-			if (line.startsWith("[INFO]")) {
-				log.info(line.substring(6));
-			} else if (line.startsWith("[WARNING]")) {
-				log.warn(line.substring(9));
-			} else if (line.startsWith("[ERROR]")) {
-				log.error(line.substring(7));
-			} else if (line.startsWith("[DEBUG]")) {
-				log.debug(line.substring(7));
-			}
-
-		}
-
-	}
+    // Public Web Services -> Web Service -> view URLs -> REST Workday XML
+
+    @Parameter(required = true)
+    private URL wdTenantServiceURL;
+
+    @Parameter(required = true)
+    private String wdVersion;
+
+    @Parameter(defaultValue = "${project.basedir}/Public_Web_Services.xml")
+    private File wdWebServiceReport;
+
+    @Parameter
+    private File wsdlPatch;
+
+    @Parameter
+    private String[] services;
+
+    @Parameter
+    private Map aliases;
+
+    @Parameter(defaultValue = "com.workday")
+    private String packageName;
+
+    @Parameter(defaultValue = "${project.groupId}")
+    private String groupId;
+
+    @Parameter
+    private String artifactId;
+
+    @Parameter
+    private String version;
+
+    @Parameter(defaultValue = "11")
+    private String jdkVersion;
+
+    //// required for the buiild
+
+    @Parameter(defaultValue = "${project.build.directory}/generated-wdjws")
+    private File sourceDestDir;
+
+    @Parameter(defaultValue = "${project}", readonly = true, required = true)
+    private MavenProject project;
+
+    @Parameter(defaultValue = "${session}", readonly = true)
+    private MavenSession session;
+
+    @Component
+    private MavenProjectHelper projectHelper;
+
+    public static final Map<String, String> DEFAULT_ALIASES;
+
+    static {
+        Map<String, String> map = new HashMap<String, String>();
+        map.put("Absence_Management", "absence");
+        map.put("Academic_Advising", "academicadvising");
+        map.put("Academic_Foundation", "academicfoundation");
+        map.put("Benefits_Administration", "benefits");
+        map.put("Cash_Management", "cash");
+        map.put("Compensation", "comp");
+        map.put("Compensation_Review", "compreview");
+        map.put("Financial_Management", "financial");
+        map.put("Identity_Management", "identity");
+        map.put("Professional_Services_Automation", "ps");
+        map.put("Revenue_Management", "revenue");
+        map.put("Workforce_Planning", "workforce");
+        map.put("External_Integrations", "extintsys");
+        map.put("Human_Resources", "hr");
+        map.put("Integrations", "intsys");
+        map.put("Payroll_Interface", "pi");
+        map.put("Performance_Management", "performance");
+        map.put("Resource_Management", "resource");
+        map.put("Time_Tracking", "timetracking");
+        map.put("Academic_Foundation", "academic");
+        map.put("Campus_Engagement", "campus");
+        map.put("Payroll_GBR", "gbrpayroll");
+        map.put("payroll_FRA", "frapayroll");
+        map.put("Professional_Services_Automation", "psa");
+        map.put("Settlement_Services", "settlementservices");
+        map.put("Student_Finance", "studentfinance");
+        map.put("Student_Records", "studentrecords");
+        map.put("Student_Recruiting", "studentrecruiting");
+        map.put("Financial_Aid", "financialaid");
+        map.put("Tenant_Data_Translation", "datatrans");
+        map.put("Dynamic_Document_Generation", "dyndocgen");
+        map.put("Workday_Connect", "wdconnect");
+        DEFAULT_ALIASES = Collections.unmodifiableMap(map);
+
+    }
+
+    public static final String PACKAGE_INFO = "@XmlSchema(namespace = \"@@NAMESPACE@@\", xmlns = { @XmlNs(namespaceURI = \"@@NAMESPACE@@\", prefix = \"wd\") }, elementFormDefault = jakarta.xml.bind.annotation.XmlNsForm.QUALIFIED)\n\n" + "package @@PACKAGE@@;\n\n" + "import jakarta.xml.bind.annotation.XmlNs;\n"
+            + "import jakarta.xml.bind.annotation.XmlSchema;\n";
+
+    public void execute() throws MojoExecutionException {
+        try {
+
+            List<WSDL> wsdls = null;
+            if (services != null && services.length > 0) {
+                wsdls = loadWSDLFromOptions();
+            } else {
+                wsdls = loadWSDLFromReport();
+            }
+
+            Map<String, String> serviceAliases = DEFAULT_ALIASES;
+            if (aliases != null && !aliases.isEmpty()) {
+                serviceAliases = aliases;
+            }
+
+            for (WSDL wsdl : wsdls) {
+                String wsdlFileName = wsdl.wsdlName + ".wsdl";
+                String serviceName = serviceAliases.get(wsdl.wsdlName) != null ? (String) serviceAliases.get(wsdl.wsdlName) : wsdl.wsdlName.toLowerCase();
+                Path serviceBaseDir = sourceDestDir.toPath().resolve(serviceName);
+                Path wsdlBaseDir = serviceBaseDir.resolve("src/main/resources/META-INF/wsdl");
+                Files.createDirectories(wsdlBaseDir);
+                Path wsdlPath = wsdlBaseDir.resolve(wsdlFileName);
+                getLog().info(String.format("Downloading WSDL %s to file %s\n", wsdl.wsdlURL, wsdlPath));
+
+                HttpsURLConnection wsdlConn = (HttpsURLConnection) wsdl.wsdlURL.openConnection();
+                Files.copy(wsdlConn.getInputStream(), wsdlPath, StandardCopyOption.REPLACE_EXISTING);
+
+                if (wsdlPatch != null) {
+                    patchWSDL(wsdlPath);
+                }
+
+                setupService(serviceBaseDir, serviceName, wsdl.wsdlName);
+                generateBindingFile(serviceBaseDir, serviceName, wsdl.wsdlName);
+                executeJAXWSImport(serviceBaseDir, serviceName, wsdl.wsdlName);
+                generatePOM(serviceBaseDir, serviceName, wsdl.wsdlName);
+                invokePOM(serviceBaseDir, serviceName, wsdl.wsdlName);
+
+            }
+
+        } catch (Throwable e) {
+            throw new MojoExecutionException("wsimport error", e);
+        }
+
+    }
+
+    public List<WSDL> loadWSDLFromReport() throws Exception {
+        List<WSDL> wsdlURLs = new LinkedList<>();
+
+        XPathFactory xpf = XPathFactory.newInstance();
+        XPath xp = xpf.newXPath();
+        xp.setNamespaceContext(new NamespaceContext() {
+
+            @Override
+            public Iterator getPrefixes(String namespaceURI) {
+                return null;
+            }
+
+            @Override
+            public String getPrefix(String namespaceURI) {
+                return null;
+            }
+
+            @Override
+            public String getNamespaceURI(String prefix) {
+                if ("ws".equals(prefix)) {
+                    return "urn:com.workday.report/Public_Web_Services";
+                }
+                return XMLConstants.NULL_NS_URI;
+            }
+        });
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        dbf.setNamespaceAware(true);
+        DocumentBuilder db = dbf.newDocumentBuilder();
+        Document doc = db.parse(wdWebServiceReport);
+        NodeList defs = (NodeList) xp.evaluate("//ws:Web_Service/@ws:Descriptor", doc.getDocumentElement(), XPathConstants.NODESET);
+        for (int i = 0; i < defs.getLength(); i++) {
+            String service = ((Attr) defs.item(i)).getTextContent();
+            if (service.contains("(Do Not Use)")) {
+                continue;
+            }
+            service = service.substring(0, service.length() - 9).replaceAll("\\s", "_");
+            String wsdl = String.format("%s/%s/%s?wsdl", wdTenantServiceURL, service, wdVersion.startsWith("v") ? wdVersion : "v" + wdVersion);
+            wsdlURLs.add(new WSDL(service, new URL(wsdl)));
+        }
+        return wsdlURLs;
+    }
+
+    public List<WSDL> loadWSDLFromOptions() throws Exception {
+        List<WSDL> wsdlURLs = new LinkedList<>();
+        for (String service : services) {
+            String wsdl = String.format("%s/%s/%s?wsdl", wdTenantServiceURL, service, wdVersion.startsWith("v") ? wdVersion : "v" + wdVersion);
+            wsdlURLs.add(new WSDL(service, new URL(wsdl)));
+        }
+        return wsdlURLs;
+    }
+
+    public static class WSDL {
+        URL wsdlURL;
+        String wsdlName;
+
+        public WSDL(String wsdlName, URL wsdlURL) {
+            this.wsdlURL = wsdlURL;
+            this.wsdlName = wsdlName;
+        }
+
+    }
+
+    public void patchWSDL(Path wsdlPath) throws IOException, ParserConfigurationException, TransformerException {
+        TransformerFactory tFactory = TransformerFactory.newInstance();
+        StreamSource patchsource = new StreamSource(wsdlPatch);
+        Transformer transformer = tFactory.newTransformer(patchsource);
+        transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+
+        StreamSource source = new StreamSource(wsdlPath.toFile());
+        Path tempFile = Files.createTempFile("patch", ".wsdl");
+        StreamResult result = new StreamResult(tempFile.toFile());
+        getLog().info(String.format("Patching wsdl file %s with XSLT %s\n", wsdlPath.toAbsolutePath(), wsdlPatch.toPath().toAbsolutePath()));
+        transformer.transform(source, result);
+        Files.copy(tempFile, wsdlPath, StandardCopyOption.REPLACE_EXISTING);
+
+    }
+
+    public void setupService(Path serviceBaseDir, String serviceName, String wsdlName) throws IOException, ParserConfigurationException, TransformerException {
+        Path packageBaseDirectory = serviceBaseDir.resolve("src/main/java");
+
+        String servicePackageName = packageName + "." + serviceName;
+        String servicePackageXMLName = servicePackageName + ".xml";
+        Path packageDirectory = packageBaseDirectory.resolve(servicePackageXMLName.replaceAll("\\.", "/"));
+
+        Files.createDirectories(packageDirectory);
+        Path packageFile = packageDirectory.resolve("package-info.java");
+        getLog().info(String.format("Creating package file %s\n", packageFile));
+        String fileContents = PACKAGE_INFO.replace("@@PACKAGE@@", servicePackageXMLName);
+        fileContents = fileContents.replace("@@NAMESPACE@@", "urn:com.workday/bsvc");
+        Files.copy(new ByteArrayInputStream(fileContents.getBytes()), packageFile, StandardCopyOption.REPLACE_EXISTING);
+
+        Path xmlAdaptersFile = packageDirectory.resolve("XmlAdapters.java");
+        InputStream is = getClass().getResourceAsStream("/META-INF/jaxws/XmlAdapters.java");
+        StringBuilder sb = new StringBuilder(2048);
+        char[] read = new char[128];
+        try (InputStreamReader ir = new InputStreamReader(is, StandardCharsets.UTF_8)) {
+            for (int i = 0; -1 != (i = ir.read(read));) {
+                sb.append(read, 0, i);
+            }
+
+        }
+        fileContents = sb.toString().replace("@@PACKAGE@@", servicePackageName);
+        getLog().info(String.format("Writing XmlAdapter to file %s\n", xmlAdaptersFile));
+        Files.copy(new ByteArrayInputStream(fileContents.getBytes()), xmlAdaptersFile, StandardCopyOption.REPLACE_EXISTING);
+
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        DocumentBuilder db = dbf.newDocumentBuilder();
+
+        Document cat = db.newDocument();
+        Element catalog = cat.createElement("catalog");
+        cat.appendChild(catalog);
+        catalog.setAttribute("xmlns", "urn:oasis:names:tc:entity:xmlns:xml:catalog");// avoid setting up DOM namespace awareness
+        catalog.setAttribute("prefer", "system");
+
+        Element system = cat.createElement("system");
+        String wsdlFileName = wsdlName + ".wsdl";
+        system.setAttribute("systemId", "file:/META-INF/wsdl/" + wsdlFileName);
+        system.setAttribute("uri", "wsdl/" + wsdlFileName);
+        catalog.appendChild(system);
+
+        Path catalogFile = serviceBaseDir.resolve("src/main/resources/META-INF/jax-ws-catalog.xml");
+        TransformerFactory tf = TransformerFactory.newInstance();
+        Transformer t = tf.newTransformer();
+        t.setOutputProperty(OutputKeys.INDENT, "yes");
+        getLog().info(String.format("Writing catalog to file %s\n", catalogFile));
+        Files.createDirectories(catalogFile.getParent());
+        t.transform(new DOMSource(cat), new StreamResult(catalogFile.toFile()));
+
+    }
+
+    public void generateBindingFile(Path serviceBaseDir, String serviceName, String wsdlName) throws IOException, TransformerException {
+        String servicePackageName = packageName + "." + serviceName;
+        String wsdlFileName = wsdlName + ".wsdl";
+
+        TransformerFactory tFactory = TransformerFactory.newInstance();
+        StreamSource stylesource = new StreamSource(getClass().getResourceAsStream("/META-INF/jaxws/binding.xsl"));
+        Transformer transformer = tFactory.newTransformer(stylesource);
+        transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+        transformer.setParameter("pkgName", servicePackageName);
+        transformer.setParameter("fileName", wsdlName);
+        transformer.setParameter("namespace", "urn:com.workday/bsvc");
+
+        Path bindingFile = serviceBaseDir.resolve(wsdlFileName.replace(".wsdl", ".jaxws"));
+        StreamSource source = new StreamSource(serviceBaseDir.resolve("src/main/resources/META-INF/wsdl").resolve(wsdlFileName).toFile());
+        StreamResult result = new StreamResult(bindingFile.toFile());
+        getLog().info(String.format("Generating JAX-WS binding to file %s\n", bindingFile));
+        transformer.transform(source, result);
+    }
+
+    public void executeJAXWSImport(Path serviceBaseDir, String serviceName, String wsdlName) throws Throwable {
+        List<String> args = new LinkedList<>();
+        Path classesDirectory = serviceBaseDir.resolve("target/classes");
+        Files.createDirectories(classesDirectory);
+        args.add("-keep");
+        args.add("-s");
+        args.add(serviceBaseDir.resolve("src/main/java").toString());
+        args.add("-d");
+        args.add(classesDirectory.toString());
+        args.add("-extension");
+        args.add("-Xnocompile");
+        args.add("-catalog");
+        args.add(serviceBaseDir.resolve("src/main/resources/META-INF/jax-ws-catalog.xml").toString());
+        args.add("-wsdllocation");
+        args.add("file:/META-INF/wsdl/" + wsdlName + ".wsdl");
+        args.add("-target");
+        args.add("3.0");
+        args.add("-B-npa");
+        args.add("-B-Xfluent-api");
+        args.add("-b");
+        args.add(serviceBaseDir.resolve(wsdlName + ".jaxws").toString());
+        args.add(serviceBaseDir.resolve("src/main/resources/META-INF/wsdl/" + wsdlName + ".wsdl").toString());
+        getLog().info(String.format("Invoking wsimport with arguments %s\n", args));
+        int result = WsImport.doMain(args.toArray(new String[args.size()]));
+        if (result != 0) {
+            throw new Exception("wsimport failed");
+        }
+    }
+
+    public void generatePOM(Path serviceBaseDir, String serviceName, String wsdlName) throws IOException, XmlPullParserException {
+        Path pomFile = serviceBaseDir.resolve("pom.xml");
+
+        Model mvn = new Model();
+        mvn.setModelVersion("4.0.0");
+        mvn.setGroupId(groupId);
+        mvn.setArtifactId(artifactId != null ? (artifactId + "-" + serviceName) : serviceName);
+        mvn.setVersion(version != null ? version : wdVersion);
+        mvn.setPackaging("jar");
+        mvn.setBuild(new Build());
+        mvn.getBuild().setExtensions(project.getBuild() != null ? project.getBuildExtensions() : Collections.EMPTY_LIST);
+        mvn.setDistributionManagement(project.getDistributionManagement());
+        mvn.setProperties(new Properties());
+        mvn.getProperties().setProperty("project.build.sourceEncoding", "UTF-8");
+
+        addDependencies(mvn);
+        addCompile(mvn, jdkVersion);
+        addSources(mvn);
+
+        getLog().info(String.format("Writing Maven WSDL %s:%s:%s pom to file %s\n", mvn.getGroupId(), mvn.getArtifactId(), mvn.getVersion(), pomFile));
+        new MavenXpp3Writer().write(new FileOutputStream(pomFile.toFile()), mvn);
+
+    }
+
+    public static void addDependencies(Model mvn) throws IOException, XmlPullParserException {
+        Dependency dependency = new Dependency();
+        dependency.setGroupId("jakarta.xml.bind");
+        dependency.setArtifactId("jakarta.xml.bind-api");
+        dependency.setVersion("4.0.0");
+        dependency.setScope("provided");
+        mvn.addDependency(dependency);
+
+        dependency = new Dependency();
+        dependency.setGroupId("jakarta.xml.ws");
+        dependency.setArtifactId("jakarta.xml.ws-api");
+        dependency.setVersion("4.0.0");
+        dependency.setScope("provided");
+        mvn.addDependency(dependency);
+    }
+
+    public static void addCompile(Model mvn, String jdkVersion) throws IOException, XmlPullParserException {
+        Plugin plugin = new Plugin();
+        mvn.getBuild().getPlugins().add(plugin);
+        plugin.setGroupId("org.apache.maven.plugins");
+        plugin.setArtifactId("maven-compiler-plugin");
+        plugin.setVersion("3.11.0");
+        PluginExecution execution = new PluginExecution();
+        plugin.addExecution(execution);
+
+        execution.setId("default-compile");
+        execution.setPhase("compile");
+        execution.addGoal("compile");
+
+        // <skipMain>true</skipMain>
+        StringBuilder pluginConfig = new StringBuilder("<configuration><release>").append(jdkVersion).append("</release></configuration>");
+        Xpp3Dom configuration = Xpp3DomBuilder.build(new ByteArrayInputStream(pluginConfig.toString().getBytes()), "UTF-8");
+        execution.setConfiguration(configuration);
+    }
+
+    public static void addSources(Model mvn) throws IOException {
+        Plugin plugin = new Plugin();
+        mvn.getBuild().getPlugins().add(plugin);
+        plugin.setGroupId("org.apache.maven.plugins");
+        plugin.setArtifactId("maven-source-plugin");
+        plugin.setVersion("3.2.1");
+        PluginExecution execution = new PluginExecution();
+        plugin.addExecution(execution);
+        execution.setId("attach-sources");
+        execution.setPhase("verify");
+        execution.addGoal("jar-no-fork");
+
+    }
+
+    public void invokePOM(Path serviceBaseDir, String serviceName, String wsdlName) throws MavenInvocationException {
+
+        MavenExecutionRequest executionRequest = session.getRequest();
+        List<String> goals = executionRequest.getGoals();
+        InvocationRequest invocationRequest = new DefaultInvocationRequest();
+        invocationRequest.setBatchMode(true);
+        invocationRequest.setPomFile(serviceBaseDir.resolve("pom.xml").toFile());
+        invocationRequest.setGoals(goals);
+        invocationRequest.setDebug(session.getRequest().isShowErrors());
+        invocationRequest.setOutputHandler(new LogOutputHandler(getLog()));
+
+        Invoker invoker = new DefaultInvoker();
+
+        // execute:
+        InvocationResult invocationResult = invoker.execute(invocationRequest);
+        if (invocationResult.getExitCode() != 0) {
+            throw new MavenInvocationException("WSDL pom invocation failed");
+        }
+    }
+
+    public static class LogOutputHandler implements InvocationOutputHandler {
+        private Log log;
+
+        public LogOutputHandler(Log log) {
+            this.log = log;
+        }
+
+        @Override
+        public void consumeLine(String line) {
+            if (line.startsWith("[INFO]")) {
+                log.info(line.substring(6));
+            } else if (line.startsWith("[WARNING]")) {
+                log.warn(line.substring(9));
+            } else if (line.startsWith("[ERROR]")) {
+                log.error(line.substring(7));
+            } else if (line.startsWith("[DEBUG]")) {
+                log.debug(line.substring(7));
+            }
+
+        }
+
+    }
 }

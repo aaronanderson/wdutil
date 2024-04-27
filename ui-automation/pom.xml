@@ -4,7 +4,7 @@
 	<parent>
 		<groupId>io.github.aaronanderson</groupId>
 		<artifactId>wdutil-parent</artifactId>
-		<version>1.2.1-SNAPSHOT</version>
+		<version>1.2.3-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>ui-automation</artifactId>
@@ -18,21 +18,21 @@
 		<dependency>
 			<groupId>org.seleniumhq.selenium</groupId>
 			<artifactId>selenium-edge-driver</artifactId>
-			<version>4.9.0</version>
+			<version>4.20.0</version>
 			<scope>provided</scope>
 		</dependency>
 		
 		<dependency>
 			<groupId>org.seleniumhq.selenium</groupId>
 			<artifactId>selenium-chrome-driver</artifactId>
-			<version>4.9.0</version>
+			<version>4.20.0</version>
 			<scope>provided</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>org.seleniumhq.selenium</groupId>
 			<artifactId>selenium-firefox-driver</artifactId>
-			<version>4.9.0</version>
+			<version>4.20.0</version>
 			<scope>provided</scope>
 		</dependency>
 
@@ -40,7 +40,7 @@
 		<dependency>
 			<groupId>org.seleniumhq.selenium</groupId>
 			<artifactId>selenium-java</artifactId>
-			<version>4.9.0</version>
+			<version>4.20.0</version>
 		</dependency>
 
 	</dependencies>
